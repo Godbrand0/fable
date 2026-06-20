@@ -83,7 +83,7 @@ export const celoService = {
       const entitlement = await publicClient.readContract({
         address: UBISCHEME_ADDRESS, abi: UBISCHEME_ABI, functionName: 'checkEntitlement',
         args: [address as `0x${string}`],
-      }).catch(() => 0n);
+      }).catch(() => BigInt(0));
       return (Number(entitlement) / 1e18).toFixed(2);
     } catch {
       return '0.00';

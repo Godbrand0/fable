@@ -34,7 +34,7 @@ async function verifyPayment(txHash: `0x${string}`, expectedFrom: string, expect
     return logs.some(log => {
       const from = (log.args as any).from?.toLowerCase();
       const to   = (log.args as any).to?.toLowerCase();
-      const val  = Number((log.args as any).value ?? 0n) / 1e18;
+      const val  = Number((log.args as any).value ?? BigInt(0)) / 1e18;
       return (
         from === expectedFrom.toLowerCase() &&
         to   === GAME_TREASURY_ADDRESS.toLowerCase() &&
