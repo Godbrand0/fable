@@ -2,26 +2,30 @@ type EventCallback = (data?: any) => void;
 
 class GameBridge {
   private listeners: Record<string, EventCallback[]> = {};
+  private lastEmitted: Record<string, any> = {};
 
-  // Register listener
-  on(event: string, callback: EventCallback): () => void {
+  // Register listener. Pass replayLast=true to immediately receive the most
+  // recent value if one was already emitted — fixes HUD mounting after Phaser.
+  on(event: string, callback: EventCallback, replayLast = false): () => void {
     if (!this.listeners[event]) {
       this.listeners[event] = [];
     }
     this.listeners[event].push(callback);
 
-    // Return unregister function
+    if (replayLast && event in this.lastEmitted) {
+      try { callback(this.lastEmitted[event]); } catch (err) { /* ignore */ }
+    }
+
     return () => this.off(event, callback);
   }
 
-  // Unregister listener
   off(event: string, callback: EventCallback): void {
     if (!this.listeners[event]) return;
     this.listeners[event] = this.listeners[event].filter(cb => cb !== callback);
   }
 
-  // Emit event
   emit(event: string, data?: any): void {
+    this.lastEmitted[event] = data;
     if (!this.listeners[event]) return;
     this.listeners[event].forEach(callback => {
       try {
@@ -32,9 +36,9 @@ class GameBridge {
     });
   }
 
-  // Clear all listeners (useful on game unmount/reset)
   clear(): void {
     this.listeners = {};
+    this.lastEmitted = {};
   }
 }
 

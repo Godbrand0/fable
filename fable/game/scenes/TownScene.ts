@@ -52,6 +52,10 @@ export default class TownScene extends Phaser.Scene {
       // Already in town, no-op
     });
 
+    gameBridge.on('request_scene_info', () => {
+      gameBridge.emit('scene_changed', { scene: 'TownScene', title: 'Town Hub' });
+    });
+
     this.buildGround();
     this.buildBoundaryWalls();
     this.buildBuildings();
@@ -536,11 +540,12 @@ export default class TownScene extends Phaser.Scene {
     const labelX = camW / 2;
     const labelY = camH * 0.38;
 
-    const nearTavern = this.tavernZone && Phaser.Geom.Rectangle.Contains(
-      this.tavernZone.setTo(this.tavernZone.x - 24, this.tavernZone.y - 24,
-        this.tavernZone.width + 48, this.tavernZone.height + 48),
-      px, py
+    // Use a temporary rect for the proximity check — never mutate this.tavernZone
+    const tavernProximity = new Phaser.Geom.Rectangle(
+      this.tavernZone.x - 24, this.tavernZone.y - 24,
+      this.tavernZone.width + 48, this.tavernZone.height + 48
     );
+    const nearTavern = this.tavernZone && Phaser.Geom.Rectangle.Contains(tavernProximity, px, py);
 
     if (nearTavern) {
       this.promptLabel

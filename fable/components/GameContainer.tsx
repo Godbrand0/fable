@@ -52,7 +52,8 @@ export default function GameContainer({ playerData }: GameContainerProps) {
         gameRef.current.destroy(true);
         gameRef.current = null;
       }
-      gameBridge.clear();
+      // Do NOT call gameBridge.clear() here — it nukes HUD's listeners too.
+      // Each component's own unsub functions handle their cleanup.
     };
   }, []);
 

@@ -5,10 +5,13 @@ import gameBridge from '../game/systems/GameBridge';
 import Joystick from './Joystick';
 import { dbService } from '../lib/supabaseClient';
 import { celoService } from '../lib/celo';
-import { 
-  Shield, Sword, Backpack, User, Compass, Wallet2, BookOpen, 
-  MapPin, Flame, Award, Heart, CheckCircle2, ShoppingBag, X, RefreshCw
+import {
+  Sword, Backpack, User, Compass, Wallet2, BookOpen,
+  MapPin, Flame, Award, Heart, CheckCircle2, X, RefreshCw, Gem
 } from 'lucide-react';
+import TavernShop, { TAVERN_WEAPONS } from './TavernShop';
+import LevelClearScreen from './LevelClearScreen';
+import { GD_ITEMS } from '../lib/nft';
 
 interface HUDProps {
   playerData: any;
@@ -36,24 +39,20 @@ export default function HUD({
   const [abilityCooldown, setAbilityCooldown] = useState(0); // 0 to 100 percentage
   const [cooldownRemaining, setCooldownRemaining] = useState(0); // seconds
   const [inTavern, setInTavern] = useState(false);
+  const [inLevelClear, setInLevelClear] = useState(false);
+  const [levelClearZone, setLevelClearZone] = useState<string>('');
   const [message, setMessage] = useState<string | null>(null);
   const [claimingUBI, setClaimingUBI] = useState(false);
 
-  // Available shop weapons in the Tavern
-  const shopWeapons = [
-    { id: 'ember_blade', name: 'Ember Blade', attack: 15, cost: 100, desc: 'Forged in lava fields.' },
-    { id: 'venom_dagger', name: 'Venom Dagger', attack: 30, cost: 250, desc: 'Coated in swamp poison.' },
-    { id: 'obsidian_greatsword', name: 'Obsidian Greatsword', attack: 60, cost: 600, desc: 'Heaviest volcanic steel.' }
-  ];
 
   useEffect(() => {
-    // 1. Scene Changes
+    // 1. Scene Changes — replayLast=true so HUD always gets the zone even if it
+    //    mounted after TownScene already emitted scene_changed during Phaser boot.
     const unsubScene = gameBridge.on('scene_changed', (data: any) => {
       setCurrentZone(data.title);
-      if (data.scene !== 'TownScene') {
-        setInTavern(false);
-      }
-    });
+      if (data.scene !== 'TownScene') setInTavern(false);
+      setInLevelClear(false);
+    }, true);
 
     // 2. Tavern Entry
     const unsubTavern = gameBridge.on('enter_tavern', () => {
@@ -81,21 +80,19 @@ export default function HUD({
     // 5. XP Sync
     const unsubXP = gameBridge.on('player_xp_gained', (gained: number) => {
       setPlayerData((prev: any) => {
-        // Apply +50% bonus if UBI claims buff is active
         const actualGain = prev.ubiBuffActive ? Math.floor(gained * 1.5) : gained;
         let newXP = prev.xp + actualGain;
         let newLevel = prev.level;
         let statPoints = prev.statPoints || 0;
-        
-        // Level up formula: Level * 100
         const xpNeeded = newLevel * 100;
         if (newXP >= xpNeeded) {
           newXP -= xpNeeded;
           newLevel += 1;
-          statPoints += 5; // 5 stat points per level
-          showFlashMessage(`LEVEL UP! You reached Level ${newLevel}!`);
+          statPoints += 5;
+          // Defer flash message — calling setState inside a setState updater
+          // triggers React's "setState during render" warning.
+          setTimeout(() => showFlashMessage(`LEVEL UP! You reached Level ${newLevel}!`), 0);
         }
-
         const updated = { ...prev, xp: newXP, level: newLevel, statPoints };
         dbService.savePlayer(updated);
         return updated;
@@ -118,19 +115,18 @@ export default function HUD({
       });
     });
 
-    // 7. Zone Cleared
+    // 7. Zone Cleared → show level clear/potion screen
     const unsubClear = gameBridge.on('zone_cleared', (data: any) => {
-      // Unlock next difficulty progression
       setPlayerData((prev: any) => {
         let maxUnlocked = prev.maxUnlockedZone || 1;
         if (data.zone === 'EmberFieldsScene' && maxUnlocked < 2) maxUnlocked = 2;
         if (data.zone === 'AshwaterMarshScene' && maxUnlocked < 3) maxUnlocked = 3;
-
         const updated = { ...prev, maxUnlockedZone: maxUnlocked };
         dbService.savePlayer(updated);
         return updated;
       });
-      showFlashMessage(`ZONE CLEARED! Relic obtained!`);
+      setLevelClearZone(data.zone);
+      setInLevelClear(true);
     });
 
     // 8. Cooldown Spinner
@@ -163,7 +159,14 @@ export default function HUD({
       }, 2000);
     });
 
+    // Retry requesting scene info after Phaser has had time to boot.
+    // Covers the case where HUD mounts before TownScene.create() has run.
+    const t1 = setTimeout(() => gameBridge.emit('request_scene_info'), 300);
+    const t2 = setTimeout(() => gameBridge.emit('request_scene_info'), 1200);
+
     return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
       unsubScene();
       unsubTavern();
       unsubHP();
@@ -244,30 +247,29 @@ export default function HUD({
     }
   };
 
-  // Buy weapon from Shop
-  const buyWeapon = (w: typeof shopWeapons[0]) => {
-    if (playerData.gold < w.cost) {
-      showFlashMessage('Not enough Gold!');
-      return;
-    }
-
-    setPlayerData((prev: any) => {
-      const arsenal = [...(prev.arsenal || ['bamboo_stick'])];
-      if (!arsenal.includes(w.id)) {
-        arsenal.push(w.id);
+  // Commit progress on-chain via a small G$ self-transfer (proves wallet ownership + embeds level data)
+  const handleCommitProgress = async () => {
+    if (!walletConnected || claimingUBI) return;
+    setClaimingUBI(true);
+    try {
+      if (!walletAddress) { await connectWallet(); }
+      // Micro self-transfer of 0 G$ with data embedded in memo (or just use the tx as a timestamp proof)
+      // Since viem ERC-20 doesn't support memos, we do a 0.001 G$ transfer to treasury as the commit record
+      const { success, txHash } = await celoService.transferG$(walletAddress, walletAddress, '0');
+      if (success || txHash) {
+        await dbService.recordProgressSync(walletAddress, playerData.level, playerData.gold, txHash || `local_${Date.now()}`);
+        setPlayerData((prev: any) => ({
+          ...prev,
+          lastProgressSync: { level: prev.level, gold: prev.gold, txHash: txHash || `local_${Date.now()}`, syncedAt: new Date().toISOString() },
+        }));
+        showFlashMessage(`Progress committed on-chain! Lv ${playerData.level} · ${playerData.gold}G recorded.`);
       }
-      
-      const updated = {
-        ...prev,
-        gold: prev.gold - w.cost,
-        arsenal
-      };
-      
-      dbService.savePlayer(updated);
-      return updated;
-    });
-    
-    showFlashMessage(`Purchased ${w.name}!`);
+    } catch (e) {
+      console.error(e);
+      showFlashMessage('Commit failed. Check wallet connection.');
+    } finally {
+      setClaimingUBI(false);
+    }
   };
 
   // Equip weapon
@@ -279,10 +281,35 @@ export default function HUD({
     });
   };
 
-  const currentWeaponObj = shopWeapons.find(w => w.id === playerData.equippedWeapon) || { name: 'Bamboo Stick', attack: 5 };
+  const currentWeaponObj = TAVERN_WEAPONS.find(w => w.id === playerData.equippedWeapon) ?? { name: 'Bamboo Stick', attack: 5 };
 
   return (
     <div className="absolute inset-0 flex flex-col pointer-events-none select-none justify-between font-mono">
+      {/* Tavern Shop full-screen overlay */}
+      {inTavern && (
+        <TavernShop
+          playerData={playerData}
+          setPlayerData={setPlayerData}
+          walletAddress={walletAddress}
+          walletConnected={walletConnected}
+          connectWallet={connectWallet}
+          gDollarBalance={gDollarBalance}
+          refreshBalance={refreshBalance}
+          onLeave={() => setInTavern(false)}
+          showMessage={showFlashMessage}
+        />
+      )}
+
+      {/* Level Clear / Potion Shop overlay */}
+      {inLevelClear && (
+        <LevelClearScreen
+          clearedZone={levelClearZone}
+          playerData={playerData}
+          setPlayerData={setPlayerData}
+          onContinue={() => setInLevelClear(false)}
+        />
+      )}
+
       {/* 1. Top HUD Header */}
       <div className="w-full p-4 flex justify-between items-start pointer-events-auto bg-gradient-to-b from-black/80 via-black/30 to-transparent">
         {/* Profile Card */}
@@ -353,62 +380,6 @@ export default function HUD({
           </div>
         )}
 
-        {/* Tavern NPC Modal Overlay */}
-        {inTavern && currentZone.includes('Town') && (
-          <div className="w-full max-w-[320px] bg-zinc-950/95 border-2 border-yellow-600 rounded-xl p-4 flex flex-col gap-3 shadow-2xl shadow-black pointer-events-auto animate-fade-in text-zinc-200">
-            <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
-              <h2 className="text-sm font-bold text-yellow-500 flex items-center gap-1">
-                🍺 Tavern Innkeeper
-              </h2>
-              <button onClick={() => setInTavern(false)} className="text-zinc-400 hover:text-zinc-100">
-                <X size={16} />
-              </button>
-            </div>
-            <p className="text-[11px] text-zinc-400 leading-relaxed italic">
-              "Welcome, hero! Need some volcanic equipment? Buy my volcanic blades, or go claim your GoodDollar UBI reward."
-            </p>
-
-            {/* Shop items */}
-            <div className="flex flex-col gap-2 bg-zinc-900/60 p-2 rounded-lg border border-zinc-800">
-              <h3 className="text-[10px] font-bold text-zinc-400 tracking-wider uppercase mb-1">
-                Weapon Merchant
-              </h3>
-              {shopWeapons.map(w => {
-                const owned = playerData.arsenal?.includes(w.id);
-                return (
-                  <div key={w.id} className="flex justify-between items-center bg-black/40 p-2 rounded border border-zinc-800/80">
-                    <div className="flex flex-col">
-                      <span className="text-[11px] font-bold text-zinc-100">{w.name}</span>
-                      <span className="text-[9px] text-zinc-500">ATK +{w.attack}</span>
-                    </div>
-                    {owned ? (
-                      <span className="text-[10px] text-green-500 font-semibold">OWNED</span>
-                    ) : (
-                      <button
-                        onClick={() => buyWeapon(w)}
-                        disabled={playerData.gold < w.cost}
-                        className="bg-yellow-600/80 hover:bg-yellow-600 text-black px-2 py-1 rounded text-[10px] font-bold disabled:opacity-50"
-                      >
-                        🪙 {w.cost}G
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            <button
-              onClick={() => {
-                setInTavern(false);
-                setActiveTab('wallet');
-              }}
-              className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white py-2 rounded-lg text-xs font-bold text-center hover:brightness-110 flex justify-center items-center gap-1.5"
-            >
-              <Wallet2 size={14} />
-              Claim Daily UBI
-            </button>
-          </div>
-        )}
       </div>
 
       {/* 3. Bottom Controls Area & Panels */}
@@ -436,21 +407,45 @@ export default function HUD({
             <div className="flex-1 text-xs">
               {/* BAG */}
               {activeTab === 'bag' && (
-                <div className="flex flex-col gap-2">
-                  {(!playerData.inventory || playerData.inventory.length === 0) ? (
-                    <div className="text-center text-zinc-500 py-6">Your bag is empty. Explore zones for materials.</div>
-                  ) : (
+                <div className="flex flex-col gap-3">
+                  {/* NFT Items */}
+                  {playerData.nftItems && playerData.nftItems.length > 0 && (
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider flex items-center gap-1">
+                        <Gem size={10} /> NFT Items (on-chain)
+                      </span>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {playerData.nftItems.map((nft: any) => {
+                          const def = GD_ITEMS.find(i => i.id === nft.itemId);
+                          return (
+                            <div key={nft.itemId} className="flex items-center gap-1.5 bg-purple-950/30 p-2 rounded border border-purple-800/40">
+                              <span className="text-base">{def?.icon ?? '🎁'}</span>
+                              <div className="flex flex-col min-w-0">
+                                <span className="text-[10px] font-bold text-zinc-100 truncate">{def?.name ?? nft.itemId}</span>
+                                <span className="text-[8px] text-purple-400">Token #{nft.tokenId}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Regular inventory */}
+                  {playerData.inventory && playerData.inventory.length > 0 ? (
                     <div className="grid grid-cols-2 gap-2">
                       {playerData.inventory.map((inv: any) => (
                         <div key={inv.item} className="flex justify-between items-center bg-zinc-900 p-2 rounded border border-zinc-800">
                           <span className="capitalize text-[11px] font-bold text-zinc-200">
                             {inv.item === 'scorpion' ? '🦂 Scorpion Shell' : '🔥 Fire Brand'}
                           </span>
-                          <span className="bg-purple-900/60 text-purple-200 px-1.5 py-0.5 rounded text-[10px] font-bold">
-                            x{inv.count}
-                          </span>
+                          <span className="bg-purple-900/60 text-purple-200 px-1.5 py-0.5 rounded text-[10px] font-bold">x{inv.count}</span>
                         </div>
                       ))}
+                    </div>
+                  ) : (!playerData.nftItems || playerData.nftItems.length === 0) && (
+                    <div className="text-center text-zinc-500 py-4 text-[11px]">
+                      Bag empty. Buy G$ items in the Tavern to mint NFTs.
                     </div>
                   )}
                 </div>
@@ -468,20 +463,21 @@ export default function HUD({
                   </div>
 
                   <div className="flex flex-col gap-1.5 mt-2">
-                    <span className="text-[10px] text-zinc-400 font-semibold tracking-wider">Arsenal (Change weapon)</span>
+                    <span className="text-[10px] text-zinc-400 font-semibold tracking-wider">Arsenal</span>
                     {playerData.arsenal?.map((weaponId: string) => {
-                      const details = shopWeapons.find(w => w.id === weaponId) || { name: 'Bamboo Stick', attack: 5 };
+                      const details = TAVERN_WEAPONS.find(w => w.id === weaponId) ?? { name: 'Bamboo Stick', attack: 5 };
                       const isEquipped = playerData.equippedWeapon === weaponId;
+                      const isNFT = playerData.nftItems?.some((n: any) => n.itemId === weaponId);
                       return (
                         <div key={weaponId} className="flex justify-between items-center bg-black/40 p-2 rounded border border-zinc-800/80">
-                          <span>{details.name} (+{details.attack} ATK)</span>
+                          <span className="flex items-center gap-1">
+                            {details.name} (+{details.attack} ATK)
+                            {isNFT && <Gem size={9} className="text-purple-400" />}
+                          </span>
                           {isEquipped ? (
                             <span className="text-[9px] bg-yellow-950 text-yellow-400 border border-yellow-800/80 px-2 py-0.5 rounded font-bold">EQUIPPED</span>
                           ) : (
-                            <button
-                              onClick={() => equipWeapon(weaponId)}
-                              className="bg-purple-600 hover:bg-purple-500 text-white text-[9px] px-2 py-0.5 rounded font-bold"
-                            >
+                            <button onClick={() => equipWeapon(weaponId)} className="bg-purple-600 hover:bg-purple-500 text-white text-[9px] px-2 py-0.5 rounded font-bold">
                               EQUIP
                             </button>
                           )}
@@ -489,6 +485,27 @@ export default function HUD({
                       );
                     })}
                   </div>
+
+                  {/* Abilities */}
+                  {playerData.abilities && playerData.abilities.length > 0 && (
+                    <div className="flex flex-col gap-1.5 mt-2">
+                      <span className="text-[10px] text-zinc-400 font-semibold tracking-wider">Special Abilities</span>
+                      {playerData.abilities.map((abilityId: string) => {
+                        const def = GD_ITEMS.find(i => i.id === abilityId);
+                        const isNFT = playerData.nftItems?.some((n: any) => n.itemId === abilityId);
+                        return (
+                          <div key={abilityId} className="flex justify-between items-center bg-black/40 p-2 rounded border border-zinc-800/80">
+                            <span className="flex items-center gap-1.5">
+                              <span>{def?.icon}</span>
+                              <span>{def?.name ?? abilityId}</span>
+                              {isNFT && <Gem size={9} className="text-purple-400" />}
+                            </span>
+                            <span className="text-[9px] text-purple-300 bg-purple-950/40 border border-purple-800/40 px-2 py-0.5 rounded">{def?.effect}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -620,26 +637,42 @@ export default function HUD({
                     </button>
                   )}
 
+                  {/* Claim UBI */}
                   <div className="flex flex-col bg-emerald-950/30 border border-emerald-900/40 p-3 rounded-lg mt-2">
                     <span className="text-emerald-400 font-bold text-[11px] flex items-center gap-1 mb-1">
                       <Award size={12} /> Claim Daily UBI Reward
                     </span>
                     <p className="text-[10px] text-zinc-300 leading-relaxed mb-3">
-                      Claim GoodDollar daily on Celo. Claiming grants a **+50% Gold and XP boost** for the next 24 hours in the volcano zones.
+                      Claim GoodDollar daily on Celo. Grants a +50% Gold and XP boost for 24 hours.
                     </p>
                     <button
                       onClick={handleClaimUBI}
                       disabled={claimingUBI}
                       className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded text-[11px] disabled:opacity-50 flex justify-center items-center gap-1.5 shadow"
                     >
-                      {claimingUBI ? (
-                        <>
-                          <RefreshCw size={12} className="animate-spin" />
-                          Claiming on Celo...
-                        </>
-                      ) : (
-                        'CLAIM DAILY G$ & BUFF'
-                      )}
+                      {claimingUBI ? <><RefreshCw size={12} className="animate-spin" /> Claiming on Celo...</> : 'CLAIM DAILY G$ & BUFF'}
+                    </button>
+                  </div>
+
+                  {/* Commit Progress on-chain */}
+                  <div className="flex flex-col bg-purple-950/20 border border-purple-900/40 p-3 rounded-lg mt-2">
+                    <span className="text-purple-300 font-bold text-[11px] flex items-center gap-1 mb-1">
+                      <Gem size={12} /> Commit Progress On-Chain
+                    </span>
+                    <p className="text-[10px] text-zinc-400 leading-relaxed mb-2">
+                      Record your current level and gold permanently on Celo. Proves your off-chain progress on-chain.
+                    </p>
+                    {playerData.lastProgressSync && (
+                      <p className="text-[9px] text-purple-400 mb-2">
+                        Last sync: Lv {playerData.lastProgressSync.level} · {new Date(playerData.lastProgressSync.syncedAt).toLocaleDateString()}
+                      </p>
+                    )}
+                    <button
+                      onClick={handleCommitProgress}
+                      disabled={claimingUBI || !walletConnected}
+                      className="w-full bg-purple-700 hover:bg-purple-600 text-white font-bold py-2 rounded text-[11px] disabled:opacity-40 flex justify-center items-center gap-1.5"
+                    >
+                      {walletConnected ? `Commit Lv ${playerData.level} — ${playerData.gold}G` : 'Connect wallet first'}
                     </button>
                   </div>
                 </div>

@@ -61,6 +61,9 @@ export default abstract class CombatScene extends Phaser.Scene {
   protected requiredDefeatsToBoss = 8;
   protected levelCleared = false;
 
+  // Death guard — prevents physics overlaps from calling playerDied multiple times
+  private playerDead = false;
+
   // HUD visuals
   private playerHPLabel!: Phaser.GameObjects.Text;
   private enemyHPGraphics!: Phaser.GameObjects.Graphics;
@@ -74,6 +77,7 @@ export default abstract class CombatScene extends Phaser.Scene {
     this.bossInstance = null;
     this.enemiesDefeated = 0;
     this.levelCleared = false;
+    this.playerDead = false;
     gameBridge.emit('request_player_data');
   }
 
@@ -141,7 +145,16 @@ export default abstract class CombatScene extends Phaser.Scene {
     const unsubR = gameBridge.on('joystick_right', (dir: any) => { this.joystickAimDir = dir; });
     const unsubA = gameBridge.on('ability_trigger', () => { this.triggerActiveAbility(); });
     const unsubE = gameBridge.on('exit_zone', () => { this.returnToTown(); });
-    this.events.on('destroy', () => { unsubL(); unsubR(); unsubA(); unsubE(); });
+    const unsubSI = gameBridge.on('request_scene_info', () => {
+      gameBridge.emit('scene_changed', { scene: this.scene.key, title: `${this.zoneName} (Lv ${this.minLevel}–${this.maxLevel})` });
+    });
+    const unsubNext = gameBridge.on('proceed_to_next_zone', (data: any) => {
+      if (!this.levelCleared) return;
+      const target = data?.targetScene ?? 'TownScene';
+      this.cameras.main.fadeOut(400, 0, 0, 0);
+      this.time.delayedCall(400, () => { this.scene.start(target); });
+    });
+    this.events.on('destroy', () => { unsubL(); unsubR(); unsubA(); unsubE(); unsubSI(); unsubNext(); });
 
     // Player HP label (world-space, updated per frame)
     this.playerHPLabel = this.add
@@ -518,7 +531,10 @@ export default abstract class CombatScene extends Phaser.Scene {
     }
   }
 
-  private damagePlayer(proj: any, player: any) {
+  // overlap(enemyProjectiles, player, cb) → Phaser calls collideSpriteVsGroup(player, group, cb)
+  // → callback fires as cb(player, groupMember). Player is always first arg.
+  private damagePlayer(player: any, proj: any) {
+    if (this.playerDead) { proj.destroy(); return; }
     proj.destroy();
 
     if (Math.random() < 0.15) {
@@ -536,7 +552,9 @@ export default abstract class CombatScene extends Phaser.Scene {
     if (this.playerHP <= 0) this.playerDied();
   }
 
+  // overlap(enemies, player, cb) → same Phaser rule → cb(player, enemy)
   private collidePlayerEnemy(player: any, enemy: any) {
+    if (this.playerDead) return;
     const lastDmgTime = enemy.getData('lastMeleeDmg') || 0;
     const now = this.time.now;
     if (now > lastDmgTime + 900) {
@@ -551,8 +569,12 @@ export default abstract class CombatScene extends Phaser.Scene {
   }
 
   private playerDied() {
+    if (this.playerDead) return;
+    this.playerDead = true;
     this.player.setVelocity(0);
     this.player.setTint(0x555753);
+    // Disable physics body so overlap callbacks stop firing
+    this.player.body?.setEnable(false);
     gameBridge.emit('player_died', { zone: this.scene.key });
   }
 
@@ -565,9 +587,10 @@ export default abstract class CombatScene extends Phaser.Scene {
   }
 
   private collectLoot(player: any, loot: any) {
-    const itemKey = loot.getData('itemKey') || 'fire_item';
-    this.showFloatingText(loot.x, loot.y - 8, itemKey === 'scorpion' ? 'Scorpion Shell' : 'Fire Brand', '#CC88FF');
-    gameBridge.emit('loot_collected', { item: itemKey });
+    const heal = 10;
+    this.playerHP = Math.min(this.playerMaxHP, this.playerHP + heal);
+    this.showFloatingText(loot.x, loot.y - 8, `+${heal} HP`, '#EF2929');
+    gameBridge.emit('player_health_changed', { hp: this.playerHP });
     loot.destroy();
   }
 

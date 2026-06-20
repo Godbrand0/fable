@@ -125,7 +125,9 @@ export default function Home() {
       maxUnlockedZone: 1, // Start with Level 1 unlocked
       equippedWeapon: 'bamboo_stick',
       arsenal: ['bamboo_stick'],
+      abilities: [],
       inventory: [],
+      nftItems: [],
       ubiBuffActive: false,
       ubiBuffExpiresAt: null
     };
