@@ -300,15 +300,6 @@ export default function HUD({
         />
       )}
 
-      {/* Level Clear / Potion Shop overlay */}
-      {inLevelClear && (
-        <LevelClearScreen
-          clearedZone={levelClearZone}
-          playerData={playerData}
-          setPlayerData={setPlayerData}
-          onContinue={() => setInLevelClear(false)}
-        />
-      )}
 
       {/* 1. Top HUD Header */}
       <div className="w-full p-4 flex justify-between items-start pointer-events-auto bg-gradient-to-b from-black/80 via-black/30 to-transparent">
@@ -749,6 +740,16 @@ export default function HUD({
           })}
         </div>
       </div>
+
+      {/* Level Clear / Potion Shop overlay — rendered LAST so it sits above all other HUD layers */}
+      {inLevelClear && (
+        <LevelClearScreen
+          clearedZone={levelClearZone}
+          playerData={playerData}
+          setPlayerData={setPlayerData}
+          onContinue={() => setInLevelClear(false)}
+        />
+      )}
     </div>
   );
 }
