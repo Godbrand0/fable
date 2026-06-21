@@ -59,7 +59,7 @@ export default function LevelClearScreen({ clearedZone, playerData, setPlayerDat
   const hpPct = Math.min(100, (playerData.hp / playerData.maxHp) * 100);
 
   return (
-    <div className="absolute inset-0 z-50 bg-black/92 flex flex-col items-center justify-center font-mono">
+    <div className="absolute inset-0 z-50 bg-black/92 flex flex-col items-center justify-center font-mono pointer-events-auto">
       <div className="w-full max-w-sm flex flex-col gap-4 px-6">
 
         {/* Header */}
