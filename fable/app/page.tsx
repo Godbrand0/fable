@@ -20,10 +20,31 @@ const GameContainer = dynamic(() => import('../components/GameContainer'), {
 });
 
 export default function Home() {
+  const [splash, setSplash]       = useState(true);
+  const [splashFade, setSplashFade] = useState(false);
+  const [progress, setProgress]   = useState(0);
+
   const [playerData, setPlayerData] = useState<any>(null);
   const [charName, setCharName] = useState('');
   const [selectedClass, setSelectedClass] = useState<'knight' | 'ranger' | 'berserker'>('knight');
   const [loading, setLoading] = useState(true);
+
+  // Splash screen: 10s progress bar, then fade out
+  useEffect(() => {
+    const DURATION = 10000;
+    const INTERVAL = 80;
+    let elapsed = 0;
+    const timer = setInterval(() => {
+      elapsed += INTERVAL;
+      setProgress(Math.min(100, (elapsed / DURATION) * 100));
+      if (elapsed >= DURATION) {
+        clearInterval(timer);
+        setSplashFade(true);
+        setTimeout(() => setSplash(false), 600);
+      }
+    }, INTERVAL);
+    return () => clearInterval(timer);
+  }, []);
 
   // Wallet states
   const [walletConnected, setWalletConnected] = useState(false);
@@ -142,6 +163,49 @@ export default function Home() {
       setLoading(false);
     }
   };
+
+  // Splash screen
+  if (splash) {
+    return (
+      <div
+        className="fixed inset-0 z-[999] flex flex-col items-center justify-center bg-[#0a0a0a] transition-opacity duration-600"
+        style={{ opacity: splashFade ? 0 : 1 }}
+      >
+        {/* Banner image */}
+        <div className="relative w-full max-w-lg px-6">
+          <Image
+            src="/banner.png"
+            alt="Fable RPG"
+            width={1024}
+            height={341}
+            className="w-full rounded-xl shadow-2xl shadow-amber-900/30"
+            priority
+          />
+        </div>
+
+        {/* Title */}
+        <div className="mt-6 text-center flex flex-col items-center gap-1">
+          <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-amber-500 tracking-widest uppercase">
+            Fable RPG
+          </h1>
+          <p className="text-xs text-zinc-500 tracking-widest uppercase">Volcanic Action RPG on Celo</p>
+        </div>
+
+        {/* Progress bar */}
+        <div className="mt-8 w-full max-w-xs px-6 flex flex-col items-center gap-2">
+          <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-yellow-500 to-amber-400 rounded-full transition-none"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <span className="text-[10px] text-zinc-600 font-mono tracking-widest uppercase">
+            {progress < 100 ? 'Loading world…' : 'Ready!'}
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
