@@ -18,7 +18,7 @@ export default class AshwaterMarshScene extends CombatScene {
   protected bossConfig: EnemyConfig = {
     key: 'swamp_hydra',
     name: 'Swamp Hydra',
-    hp: 250,
+    hp: 1800,
     speed: 0,
     damage: 30,
     points: 100,

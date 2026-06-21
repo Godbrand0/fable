@@ -23,7 +23,7 @@ export default class EmberFieldsScene extends CombatScene {
   protected bossConfig: EnemyConfig = {
     key: 'lava_pumpkin',
     name: 'Lava Pumpkin',
-    hp: 100,
+    hp: 1000,
     speed: 0,
     damage: 20,
     points: 50,

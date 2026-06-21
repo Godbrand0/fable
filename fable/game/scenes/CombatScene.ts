@@ -150,6 +150,7 @@ export default abstract class CombatScene extends Phaser.Scene {
     });
     const unsubNext = gameBridge.on('proceed_to_next_zone', (data: any) => {
       if (!this.levelCleared) return;
+      if (!this.scene.isActive(this.scene.key) || !this.cameras?.main) return;
       const target = data?.targetScene ?? 'TownScene';
       this.cameras.main.fadeOut(400, 0, 0, 0);
       this.time.delayedCall(400, () => { this.scene.start(target); });
@@ -603,6 +604,8 @@ export default abstract class CombatScene extends Phaser.Scene {
   }
 
   public returnToTown() {
+    if (this.levelCleared) return;
+    if (!this.scene.isActive(this.scene.key) || !this.cameras?.main) return;
     this.cameras.main.fadeOut(300, 0, 0, 0);
     this.time.delayedCall(300, () => { this.scene.start('TownScene'); });
   }

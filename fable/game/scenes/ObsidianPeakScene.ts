@@ -23,7 +23,7 @@ export default class ObsidianPeakScene extends CombatScene {
   protected bossConfig: EnemyConfig = {
     key: 'fire_demon',
     name: 'Fire Demon',
-    hp: 500,
+    hp: 2100,
     speed: 25,
     damage: 45,
     points: 200,
