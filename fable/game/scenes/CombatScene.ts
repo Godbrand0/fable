@@ -569,7 +569,7 @@ export default abstract class CombatScene extends Phaser.Scene {
     }
   }
 
-  private playerDied() {
+  protected playerDied() {
     if (this.playerDead) return;
     this.playerDead = true;
     this.player.setVelocity(0);
