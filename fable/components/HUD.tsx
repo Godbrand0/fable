@@ -6,8 +6,8 @@ import Joystick from './Joystick';
 import { dbService } from '../lib/supabaseClient';
 import { celoService } from '../lib/celo';
 import {
-  Sword, Backpack, User, Compass, Wallet2, BookOpen,
-  MapPin, Flame, Award, Heart, CheckCircle2, X, RefreshCw, Gem
+  Sword, Backpack, User, BookOpen,
+  MapPin, Flame, Award, Heart, CheckCircle2, X, RefreshCw, Gem, Wallet2
 } from 'lucide-react';
 import TavernShop, { TAVERN_WEAPONS } from './TavernShop';
 import LevelClearScreen from './LevelClearScreen';
@@ -23,7 +23,7 @@ interface HUDProps {
   refreshBalance: () => Promise<void>;
 }
 
-type TabType = 'none' | 'bag' | 'loadout' | 'stats' | 'codex' | 'journey' | 'wallet';
+type TabType = 'none' | 'bag' | 'loadout' | 'stats' | 'codex' | 'wallet';
 
 export default function HUD({
   playerData,
@@ -43,6 +43,7 @@ export default function HUD({
   const [levelClearZone, setLevelClearZone] = useState<string>('');
   const [message, setMessage] = useState<string | null>(null);
   const [claimingUBI, setClaimingUBI] = useState(false);
+  const [addressCopied, setAddressCopied] = useState(false);
 
 
   useEffect(() => {
@@ -217,12 +218,14 @@ export default function HUD({
     if (claimingUBI) return;
     setClaimingUBI(true);
     try {
-      if (!walletConnected) {
+      let addr = walletAddress;
+      if (!walletConnected || !addr) {
         await connectWallet();
+        addr = (await celoService.getConnectedAddress()) ?? '';
       }
+      if (!addr) { showFlashMessage('Connect your wallet to claim G$.'); return; }
 
-      // Claim via service (calls real network contract or falls back to mock claiming)
-      const tx = await celoService.claimUBI(walletAddress);
+      const tx = await celoService.claimUBI(addr);
       
       // Update balance
       await refreshBalance();
@@ -381,8 +384,7 @@ export default function HUD({
                 {activeTab === 'loadout' && <Sword size={14} />}
                 {activeTab === 'stats' && <User size={14} />}
                 {activeTab === 'codex' && <BookOpen size={14} />}
-                {activeTab === 'journey' && <Compass size={14} />}
-                {activeTab === 'wallet' && <Wallet2 size={14} />}
+                {activeTab === 'wallet' && <User size={14} />}
                 <span>{activeTab}</span>
               </div>
               <button onClick={() => setActiveTab('none')} className="text-zinc-500 hover:text-zinc-300">
@@ -558,112 +560,157 @@ export default function HUD({
                 </div>
               )}
 
-              {/* JOURNEY */}
-              {activeTab === 'journey' && (
-                <div className="flex flex-col gap-2">
-                  <div className="bg-zinc-900 p-2.5 rounded border border-zinc-800 flex flex-col gap-1">
-                    <span className="text-[10px] text-zinc-500 font-bold uppercase">Main Quest</span>
-                    <span className="font-bold text-zinc-100 flex items-center gap-1">
-                      ⚔️ Reach Obsidian Peak
-                    </span>
-                    <p className="text-[10px] text-zinc-400">
-                      Defeat bosses to unlock progressive zones: Ember Fields (Lv 1-2) → Ashwater Marsh (Lv 3-5) → Obsidian Peak (Lv 6-8).
-                    </p>
-                  </div>
-                  
-                  <div className="flex flex-col gap-1.5 mt-2">
-                    <span className="text-[10px] text-zinc-500 font-bold uppercase">Zone Clear Status</span>
-                    {[
-                      { name: '1. Ember Fields', unlocked: true, cleared: playerData.maxUnlockedZone > 1 },
-                      { name: '2. Ashwater Marsh', unlocked: playerData.maxUnlockedZone >= 2, cleared: playerData.maxUnlockedZone > 2 },
-                      { name: '3. Obsidian Peak', unlocked: playerData.maxUnlockedZone >= 3, cleared: false }
-                    ].map((zone, idx) => (
-                      <div key={idx} className="flex justify-between items-center bg-black/40 p-2 rounded text-[10px] border border-zinc-850">
-                        <span className={zone.unlocked ? 'text-zinc-200' : 'text-zinc-600'}>{zone.name}</span>
-                        {zone.cleared ? (
-                          <span className="text-green-500 font-bold flex items-center gap-0.5"><CheckCircle2 size={10} /> Cleared</span>
-                        ) : zone.unlocked ? (
-                          <span className="text-amber-500 font-bold">Active</span>
-                        ) : (
-                          <span className="text-zinc-600">Locked</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {/* PROFILE */}
+              {activeTab === 'wallet' && (() => {
+                const levelsCleared = Math.max(0, (playerData.maxUnlockedZone || 1) - 1);
+                const nftCount = playerData.nftItems?.length ?? 0;
+                const zoneNames: Record<number, string> = { 1: 'Ember Fields', 2: 'Ashwater Marsh', 3: 'Obsidian Peak' };
 
-              {/* WALLET & GOODDOLLAR UBI */}
-              {activeTab === 'wallet' && (
-                <div className="flex flex-col gap-3">
-                  {walletConnected ? (
-                    <div className="flex flex-col gap-2 bg-zinc-900 p-3 rounded border border-zinc-800">
-                      <div className="flex justify-between items-center text-[10px]">
-                        <span className="text-zinc-500">Connected Wallet</span>
-                        <span className="text-green-400 font-semibold">Active</span>
-                      </div>
-                      <span className="text-[11px] font-bold text-zinc-200 block truncate font-mono">
-                        {walletAddress}
-                      </span>
-                      <div className="flex justify-between mt-2 pt-2 border-t border-zinc-800 text-[11px]">
-                        <span className="text-zinc-400 font-bold">GoodDollar Balance</span>
-                        <span className="text-emerald-400 font-bold flex items-center gap-1">
-                          {parseFloat(gDollarBalance).toFixed(2)} G$
-                          <button onClick={refreshBalance} className="text-zinc-500 hover:text-zinc-300">
-                            <RefreshCw size={10} />
+                return (
+                  <div className="flex flex-col gap-3">
+
+                    {/* ── Wallet ── */}
+                    {walletConnected ? (
+                      <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-3 flex flex-col gap-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Wallet</span>
+                          <span className="text-[9px] bg-green-900/50 text-green-400 border border-green-800/50 px-1.5 py-0.5 rounded-full font-bold">Connected</span>
+                        </div>
+                        <div className="flex items-center gap-2 bg-black/40 rounded-lg px-2 py-1.5">
+                          <span className="text-[10px] font-mono text-zinc-300 flex-1 truncate">
+                            {walletAddress.slice(0, 8)}…{walletAddress.slice(-6)}
+                          </span>
+                          <button
+                            onClick={() => { navigator.clipboard.writeText(walletAddress); setAddressCopied(true); setTimeout(() => setAddressCopied(false), 2000); }}
+                            className="text-zinc-400 hover:text-white shrink-0 text-[9px] font-bold"
+                          >
+                            {addressCopied ? '✓ Copied' : 'Copy'}
                           </button>
-                        </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={connectWallet}
+                        className="w-full bg-gradient-to-r from-purple-700 to-indigo-700 text-white py-3 rounded-xl text-xs font-bold tracking-wider hover:brightness-110 active:scale-95 transition-all"
+                      >
+                        🔌 Connect Celo Wallet
+                      </button>
+                    )}
+
+                    {/* ── Balances ── */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="bg-emerald-950/40 border border-emerald-800/40 rounded-xl p-3 flex flex-col gap-0.5">
+                        <span className="text-[9px] text-emerald-500 font-bold uppercase tracking-wider">G$ Balance</span>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <span className="text-[15px] font-extrabold text-emerald-300 leading-none">
+                            {parseFloat(gDollarBalance).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                          </span>
+                          <button onClick={refreshBalance} className="text-emerald-700 hover:text-emerald-400 ml-auto">
+                            <RefreshCw size={9} />
+                          </button>
+                        </div>
+                        <span className="text-[9px] text-emerald-700">GoodDollar (Celo)</span>
+                      </div>
+                      <div className="bg-yellow-950/40 border border-yellow-800/40 rounded-xl p-3 flex flex-col gap-0.5">
+                        <span className="text-[9px] text-yellow-500 font-bold uppercase tracking-wider">Gold</span>
+                        <span className="text-[15px] font-extrabold text-yellow-300 leading-none mt-0.5">{playerData.gold.toLocaleString()}</span>
+                        <span className="text-[9px] text-yellow-700">In-game tokens 🪙</span>
                       </div>
                     </div>
-                  ) : (
-                    <button
-                      onClick={connectWallet}
-                      className="w-full bg-gradient-to-r from-purple-700 to-indigo-700 text-white py-2.5 rounded-lg text-xs font-bold font-mono hover:brightness-110"
-                    >
-                      🔌 Connect Celo Wallet
-                    </button>
-                  )}
 
-                  {/* Claim UBI */}
-                  <div className="flex flex-col bg-emerald-950/30 border border-emerald-900/40 p-3 rounded-lg mt-2">
-                    <span className="text-emerald-400 font-bold text-[11px] flex items-center gap-1 mb-1">
-                      <Award size={12} /> Claim Daily UBI Reward
-                    </span>
-                    <p className="text-[10px] text-zinc-300 leading-relaxed mb-3">
-                      Claim GoodDollar daily on Celo. Grants a +50% Gold and XP boost for 24 hours.
-                    </p>
+                    {/* ── Progress Stats ── */}
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { label: 'Level', value: playerData.level, color: 'text-purple-300', bg: 'bg-purple-950/30 border-purple-800/30' },
+                        { label: 'Zones Cleared', value: `${levelsCleared}/3`, color: 'text-blue-300', bg: 'bg-blue-950/30 border-blue-800/30' },
+                        { label: 'NFTs Owned', value: nftCount, color: 'text-pink-300', bg: 'bg-pink-950/30 border-pink-800/30' },
+                      ].map(stat => (
+                        <div key={stat.label} className={`${stat.bg} border rounded-xl p-2.5 flex flex-col items-center gap-1`}>
+                          <span className={`text-[16px] font-extrabold ${stat.color}`}>{stat.value}</span>
+                          <span className="text-[8px] text-zinc-500 font-bold uppercase tracking-wider text-center leading-tight">{stat.label}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* ── Zones cleared list ── */}
+                    {levelsCleared > 0 && (
+                      <div className="flex gap-1.5 flex-wrap">
+                        {Array.from({ length: levelsCleared }, (_, i) => (
+                          <span key={i} className="text-[9px] bg-green-900/40 border border-green-700/40 text-green-400 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                            <CheckCircle2 size={8} /> {zoneNames[i + 1]}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* ── Weapons ── */}
+                    {playerData.arsenal && playerData.arsenal.length > 0 && (
+                      <div className="flex flex-col gap-1.5">
+                        <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">Weapons</span>
+                        <div className="flex flex-col gap-1">
+                          {playerData.arsenal.map((wId: string) => {
+                            const w = TAVERN_WEAPONS.find(x => x.id === wId);
+                            const isEquipped = playerData.equippedWeapon === wId;
+                            const isNFT = playerData.nftItems?.some((n: any) => n.itemId === wId);
+                            return (
+                              <div key={wId} className="flex items-center gap-2 bg-zinc-900/60 border border-zinc-800 rounded-lg px-2.5 py-1.5">
+                                <span className="text-sm">{isNFT ? (GD_ITEMS.find(i => i.id === wId)?.icon ?? '⚔️') : '⚔️'}</span>
+                                <span className="text-[10px] font-bold text-zinc-200 flex-1">{w?.name ?? wId}</span>
+                                {isNFT && <Gem size={8} className="text-purple-400" />}
+                                {isEquipped && <span className="text-[8px] bg-yellow-900/50 text-yellow-400 border border-yellow-700/40 px-1.5 py-0.5 rounded font-bold">Equipped</span>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── Abilities (NFT) ── */}
+                    {playerData.abilities && playerData.abilities.length > 0 && (
+                      <div className="flex flex-col gap-1.5">
+                        <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">Abilities</span>
+                        <div className="flex gap-1.5 flex-wrap">
+                          {playerData.abilities.map((aId: string) => {
+                            const def = GD_ITEMS.find(i => i.id === aId);
+                            return (
+                              <span key={aId} className="text-[9px] bg-purple-950/40 border border-purple-700/40 text-purple-300 px-2 py-1 rounded-lg font-bold flex items-center gap-1">
+                                {def?.icon} {def?.name ?? aId}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── Active Buffs ── */}
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">Active Buffs</span>
+                      {playerData.ubiBuffActive ? (
+                        <div className="flex items-center gap-2 bg-amber-950/40 border border-amber-700/40 rounded-lg px-2.5 py-1.5">
+                          <Flame size={12} className="text-amber-400 shrink-0" />
+                          <div className="flex flex-col">
+                            <span className="text-[10px] font-bold text-amber-300">+50% XP & Gold</span>
+                            <span className="text-[8px] text-amber-600">Daily UBI buff — 24 hours</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-zinc-600 italic">No active buffs</p>
+                      )}
+                    </div>
+
+                    {/* ── Claim UBI ── */}
                     <button
                       onClick={handleClaimUBI}
                       disabled={claimingUBI}
-                      className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded text-[11px] disabled:opacity-50 flex justify-center items-center gap-1.5 shadow"
+                      className="w-full bg-emerald-700 hover:bg-emerald-600 text-white font-bold py-2.5 rounded-xl text-[11px] disabled:opacity-50 flex justify-center items-center gap-1.5 tracking-wider active:scale-95 transition-all"
                     >
-                      {claimingUBI ? <><RefreshCw size={12} className="animate-spin" /> Claiming on Celo...</> : 'CLAIM DAILY G$ & BUFF'}
+                      {claimingUBI
+                        ? <><RefreshCw size={12} className="animate-spin" /> Claiming…</>
+                        : <><Award size={12} /> Claim Daily G$ UBI</>}
                     </button>
                   </div>
-
-                  {/* Commit Progress on-chain */}
-                  <div className="flex flex-col bg-purple-950/20 border border-purple-900/40 p-3 rounded-lg mt-2">
-                    <span className="text-purple-300 font-bold text-[11px] flex items-center gap-1 mb-1">
-                      <Gem size={12} /> Commit Progress On-Chain
-                    </span>
-                    <p className="text-[10px] text-zinc-400 leading-relaxed mb-2">
-                      Record your current level and gold permanently on Celo. Proves your off-chain progress on-chain.
-                    </p>
-                    {playerData.lastProgressSync && (
-                      <p className="text-[9px] text-purple-400 mb-2">
-                        Last sync: Lv {playerData.lastProgressSync.level} · {new Date(playerData.lastProgressSync.syncedAt).toLocaleDateString()}
-                      </p>
-                    )}
-                    <button
-                      onClick={handleCommitProgress}
-                      disabled={claimingUBI || !walletConnected}
-                      className="w-full bg-purple-700 hover:bg-purple-600 text-white font-bold py-2 rounded text-[11px] disabled:opacity-40 flex justify-center items-center gap-1.5"
-                    >
-                      {walletConnected ? `Commit Lv ${playerData.level} — ${playerData.gold}G` : 'Connect wallet first'}
-                    </button>
-                  </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           </div>
         )}
@@ -717,10 +764,9 @@ export default function HUD({
           {[
             { id: 'bag', label: 'Bag', icon: <Backpack size={16} /> },
             { id: 'loadout', label: 'Loadout', icon: <Sword size={16} /> },
-            { id: 'stats', label: 'Stats', icon: <User size={16} /> },
+            { id: 'stats', label: 'Stats', icon: <Award size={16} /> },
             { id: 'codex', label: 'Codex', icon: <BookOpen size={16} /> },
-            { id: 'journey', label: 'Journey', icon: <Compass size={16} /> },
-            { id: 'wallet', label: 'Wallet', icon: <Wallet2 size={16} /> }
+            { id: 'wallet', label: 'Profile', icon: <User size={16} /> }
           ].map(tab => {
             const active = activeTab === tab.id;
             return (
@@ -743,6 +789,7 @@ export default function HUD({
           clearedZone={levelClearZone}
           playerData={playerData}
           setPlayerData={setPlayerData}
+          walletAddress={walletAddress || undefined}
           onContinue={() => setInLevelClear(false)}
         />
       )}

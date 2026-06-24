@@ -5,7 +5,7 @@ import { FABLE_ITEMS_ADDRESS, FABLE_ITEMS_ABI, NftItem } from './nft';
 const CELO_RPC = process.env.NEXT_PUBLIC_CELO_RPC_URL || 'https://forno.celo.org';
 
 export const G$_ADDRESS = (process.env.NEXT_PUBLIC_GOODDOLLAR_ADDRESS || '0x62B8B11039FcfE5aB0C56E502b1C372A3d2a9c7A') as `0x${string}`;
-export const UBISCHEME_ADDRESS = (process.env.NEXT_PUBLIC_UBISCHEME_ADDRESS || '0xAACbaaB8571cbECEB46ba85B5981efDB8928545e') as `0x${string}`;
+export const UBISCHEME_ADDRESS = (process.env.NEXT_PUBLIC_UBISCHEME_ADDRESS || '0x43d72Ff17701B2DA814620735C39C620Ce0ea4A1') as `0x${string}`;
 
 export const G$_ABI = parseAbi([
   'function balanceOf(address owner) view returns (uint256)',

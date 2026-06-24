@@ -77,34 +77,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── Mint NFT ────────────────────────────────────────────────────────────
-    if (!contractDeployed || !minterKey) {
-      // Contract not yet deployed — record as mock mint
-      const mockHash = `mock_mint_${itemId}_${Date.now()}`;
-      return NextResponse.json({
-        success: true,
-        mocked: true,
-        tokenId,
-        txHash: mockHash,
-        message: 'NFT recorded off-chain (contract pending deployment)',
-      });
-    }
-
-    const minterAccount = privateKeyToAccount(minterKey as `0x${string}`);
-    const minterWallet  = createWalletClient({ account: minterAccount, chain, transport: http(RPC) });
-
-    const { request } = await serverClient.simulateContract({
-      account: minterAccount,
-      address: FABLE_ITEMS_ADDRESS,
-      abi: FABLE_ITEMS_ABI,
-      functionName: 'mint',
-      args: [walletAddress as `0x${string}`, BigInt(tokenId), itemId],
+    // Minting is now handled on-chain via transferAndCall — this route is deprecated.
+    return NextResponse.json({
+      success: true,
+      mocked: true,
+      tokenId,
+      txHash: `deprecated_${itemId}_${Date.now()}`,
+      message: 'Use transferAndCall on the G$ token to mint items directly.',
     });
-
-    const mintHash = await minterWallet.writeContract(request);
-    await serverClient.waitForTransactionReceipt({ hash: mintHash });
-
-    return NextResponse.json({ success: true, mocked: false, tokenId, txHash: mintHash });
   } catch (err: any) {
     console.error('[mint-item]', err);
     return NextResponse.json({ error: err.message || 'Mint failed' }, { status: 500 });

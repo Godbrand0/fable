@@ -1,15 +1,60 @@
 import { parseAbi } from 'viem';
 
 export const FABLE_ITEMS_ADDRESS = (
-  process.env.NEXT_PUBLIC_FABLE_ITEMS_ADDRESS || '0xbd7B16b0657fC5E952389410fCaC54A969A601a3'
+  process.env.NEXT_PUBLIC_FABLE_ITEMS_ADDRESS || '0x3939Fb4dc682A25c3581AF101f47A9bA6032a5eb'
 ) as `0x${string}`;
 
 export const FABLE_ITEMS_ABI = parseAbi([
+  // ── Read ──────────────────────────────────────────────────────────────────
   'function balanceOf(address account, uint256 id) view returns (uint256)',
+  'function balanceOfBatch(address[] accounts, uint256[] ids) view returns (uint256[])',
   'function uri(uint256 tokenId) view returns (string)',
+  'function isApprovedForAll(address account, address operator) view returns (bool)',
+  'function supportsInterface(bytes4 interfaceId) view returns (bool)',
+  'function admin() view returns (address)',
+  'function gToken() view returns (address)',
+  'function treasury() view returns (address)',
+  'function identityContract() view returns (address)',
   'function itemPrice(uint256 tokenId) view returns (uint256)',
+  'function levelReward(uint256 levelId) view returns (uint256)',
+  'function levelClaimed(address player, uint256 levelId) view returns (bool)',
+  // ── Write (user) ──────────────────────────────────────────────────────────
+  'function onTokenTransfer(address from, uint256 value, bytes data) returns (bool)',
+  'function setApprovalForAll(address operator, bool approved)',
+  'function safeTransferFrom(address from, address to, uint256 id, uint256 amount, bytes data)',
+  // ── Write (admin) ─────────────────────────────────────────────────────────
+  'function setPrice(uint256 tokenId, uint256 price)',
+  'function setLevelReward(uint256 levelId, uint256 amount)',
+  'function grantLevelReward(address player, uint256 levelId)',
+  'function setIdentityContract(address identity)',
+  'function setTreasury(address newTreasury)',
+  'function setBaseURI(string newURI)',
+  'function transferAdmin(address newAdmin)',
+  'function withdrawRewardPool(uint256 amount)',
+  // ── Events ────────────────────────────────────────────────────────────────
   'event ItemPurchased(address indexed buyer, uint256 indexed tokenId, uint256 price)',
+  'event LevelRewardClaimed(address indexed player, uint256 indexed levelId, uint256 amount)',
+  'event PriceSet(uint256 indexed tokenId, uint256 price)',
+  'event LevelRewardSet(uint256 indexed levelId, uint256 amount)',
+  'event TreasuryChanged(address indexed oldTreasury, address indexed newTreasury)',
+  'event IdentityContractSet(address indexed identity)',
+  'event TransferSingle(address indexed operator, address indexed from, address indexed to, uint256 id, uint256 value)',
+  'event ApprovalForAll(address indexed account, address indexed operator, bool approved)',
 ]);
+
+// Zone scene name → level ID (used for on-chain reward tracking)
+export const ZONE_LEVEL_IDS: Record<string, number> = {
+  EmberFieldsScene:   1,
+  AshwaterMarshScene: 2,
+  ObsidianPeakScene:  3,
+};
+
+// Human-readable G$ reward per level (matches setLevelReward calls)
+export const ZONE_LEVEL_REWARDS: Record<string, number> = {
+  EmberFieldsScene:   500,
+  AshwaterMarshScene: 1000,
+  ObsidianPeakScene:  2000,
+};
 
 // Item slug → ERC-1155 token ID
 export const ITEM_TOKEN_IDS: Record<string, number> = {

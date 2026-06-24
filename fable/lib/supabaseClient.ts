@@ -49,28 +49,53 @@ export interface LeaderboardEntry {
   score: number;
 }
 
-// Ensure any loaded player has all expected fields with safe defaults
-function withDefaults(p: Partial<PlayerData>): PlayerData {
+// Normalise a row from either Supabase (lowercase keys) or localStorage (camelCase).
+function withDefaults(p: any): PlayerData {
   return {
-    wallet_address: p.wallet_address ?? 'local_player',
-    name: p.name ?? 'Hero',
-    class: p.class ?? 'knight',
-    level: p.level ?? 1,
-    xp: p.xp ?? 0,
-    gold: p.gold ?? 100,
-    maxHp: p.maxHp ?? 130,
-    hp: p.hp ?? 130,
-    stats: p.stats ?? { strength: 12, agility: 8, defense: 12, vitality: 12 },
-    statPoints: p.statPoints ?? 0,
-    maxUnlockedZone: p.maxUnlockedZone ?? 1,
-    equippedWeapon: p.equippedWeapon ?? 'bamboo_stick',
-    arsenal: p.arsenal ?? ['bamboo_stick'],
-    abilities: p.abilities ?? [],
-    inventory: p.inventory ?? [],
-    nftItems: p.nftItems ?? [],
-    ubiBuffActive: p.ubiBuffActive ?? false,
-    ubiBuffExpiresAt: p.ubiBuffExpiresAt ?? null,
-    lastProgressSync: p.lastProgressSync,
+    wallet_address:   p.wallet_address   ?? 'local_player',
+    name:             p.name             ?? 'Hero',
+    class:            p.hero_class       ?? p.class        ?? 'knight',
+    level:            p.level            ?? 1,
+    xp:               p.xp               ?? 0,
+    gold:             p.gold             ?? 100,
+    maxHp:            p.maxHp            ?? p.maxhp        ?? 130,
+    hp:               p.hp               ?? 130,
+    stats:            p.stats            ?? { strength: 12, agility: 8, defense: 12, vitality: 12 },
+    statPoints:       p.statPoints       ?? p.statpoints   ?? 0,
+    maxUnlockedZone:  p.maxUnlockedZone  ?? p.maxunlockedzone  ?? 1,
+    equippedWeapon:   p.equippedWeapon   ?? p.equippedweapon   ?? 'bamboo_stick',
+    arsenal:          p.arsenal          ?? ['bamboo_stick'],
+    abilities:        p.abilities        ?? [],
+    inventory:        p.inventory        ?? [],
+    nftItems:         p.nftItems         ?? p.nftitems     ?? [],
+    ubiBuffActive:    p.ubiBuffActive     ?? p.ubibuffactive    ?? false,
+    ubiBuffExpiresAt: p.ubiBuffExpiresAt  ?? p.ubibuffexpiresat ?? null,
+    lastProgressSync: p.lastProgressSync  ?? p.lastprogresssync ?? undefined,
+  };
+}
+
+// Map camelCase PlayerData to the snake_case columns Supabase expects
+function toDbRow(player: PlayerData) {
+  return {
+    wallet_address:   player.wallet_address,
+    name:             player.name,
+    hero_class:       player.class,
+    level:            player.level,
+    xp:               player.xp,
+    gold:             player.gold,
+    maxhp:            player.maxHp,
+    hp:               player.hp,
+    stats:            player.stats,
+    statpoints:       player.statPoints,
+    maxunlockedzone:  player.maxUnlockedZone,
+    equippedweapon:   player.equippedWeapon,
+    arsenal:          player.arsenal,
+    abilities:        player.abilities,
+    inventory:        player.inventory,
+    nftitems:         player.nftItems,
+    ubibuffactive:    player.ubiBuffActive,
+    ubibuffexpiresat: player.ubiBuffExpiresAt,
+    lastprogresssync: player.lastProgressSync ?? null,
   };
 }
 
@@ -92,8 +117,8 @@ export const dbService = {
     const cleanPlayer = withDefaults({ ...player, wallet_address: address });
 
     if (supabase) {
-      const { data, error } = await supabase.from('players').upsert(cleanPlayer).select().single();
-      if (!error && data) return withDefaults(data as Partial<PlayerData>);
+      const { data, error } = await supabase.from('players').upsert(toDbRow(cleanPlayer)).select().single();
+      if (!error && data) return withDefaults(data);
       console.warn('Supabase save failed, falling back to localStorage', error);
     }
 
@@ -116,6 +141,18 @@ export const dbService = {
     await this.savePlayer(updated);
   },
 
+  // Log a G$ level reward claim to the audit table
+  async recordLevelRewardClaim(walletAddress: string, levelId: number, zone: string, amountGd: number, txHash: string): Promise<void> {
+    if (!supabase) return;
+    await supabase.from('level_reward_claims').upsert({
+      wallet_address: walletAddress.toLowerCase(),
+      level_id: levelId,
+      zone,
+      amount_gd: amountGd,
+      tx_hash: txHash,
+    }, { onConflict: 'wallet_address,level_id' });
+  },
+
   // Save an on-chain progress sync record
   async recordProgressSync(walletAddress: string, level: number, gold: number, txHash: string): Promise<void> {
     const player = await this.getPlayer(walletAddress.toLowerCase());
@@ -125,6 +162,26 @@ export const dbService = {
       lastProgressSync: { level, gold, txHash, syncedAt: new Date().toISOString() },
     };
     await this.savePlayer(updated);
+  },
+
+  async getPlayerByName(name: string): Promise<PlayerData | null> {
+    const trimmed = name.trim().toLowerCase();
+    if (!trimmed) return null;
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('players')
+        .select('*')
+        .ilike('name', trimmed)
+        .neq('wallet_address', 'local_player')
+        .maybeSingle();
+      if (!error && data) return withDefaults(data);
+    }
+    // localStorage fallback
+    const players = JSON.parse(localStorage.getItem(LOCAL_KEY) || '{}');
+    const found = Object.values(players).find(
+      (p: any) => p.name?.toLowerCase() === trimmed && p.wallet_address !== 'local_player'
+    );
+    return found ? withDefaults(found as any) : null;
   },
 
   async getLeaderboard(): Promise<LeaderboardEntry[]> {
