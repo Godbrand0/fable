@@ -225,26 +225,38 @@ export default function HUD({
       }
       if (!addr) { showFlashMessage('Connect your wallet to claim G$.'); return; }
 
-      const tx = await celoService.claimUBI(addr);
-      
-      // Update balance
-      await refreshBalance();
+      // Pre-check GoodDollar identity before attempting on-chain claim
+      const verified = await celoService.isGoodDollarVerified(addr);
+      if (!verified) {
+        showFlashMessage('Not GoodDollar verified. Visit wallet.gooddollar.org to verify.');
+        return;
+      }
 
-      // Trigger 24 hour daily XP/Gold bonus buff
+      const success = await celoService.claimUBI(addr);
+      if (!success) {
+        showFlashMessage('Claim failed — transaction did not succeed.');
+        return;
+      }
+
+      // Only apply buff after confirmed on-chain success
+      await refreshBalance();
       setPlayerData((prev: any) => {
         const updated = {
           ...prev,
           ubiBuffActive: true,
-          ubiBuffExpiresAt: Date.now() + 24 * 60 * 60 * 1000
+          ubiBuffExpiresAt: Date.now() + 24 * 60 * 60 * 1000,
         };
         dbService.savePlayer(updated);
         return updated;
       });
-
       showFlashMessage('Daily GoodDollar claimed! 24-hr +50% XP/Gold Buff Active!');
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      showFlashMessage('Claim failed. Please verify your connection.');
+      if (e?.message?.includes('not whitelisted') || e?.message?.includes('not GoodDollar verified')) {
+        showFlashMessage('Not GoodDollar verified. Visit wallet.gooddollar.org to verify.');
+      } else {
+        showFlashMessage('Claim failed. Please try again.');
+      }
     } finally {
       setClaimingUBI(false);
     }
@@ -570,32 +582,38 @@ export default function HUD({
                   <div className="flex flex-col gap-3">
 
                     {/* ── Wallet ── */}
-                    {walletConnected ? (
-                      <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-3 flex flex-col gap-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Wallet</span>
-                          <span className="text-[9px] bg-green-900/50 text-green-400 border border-green-800/50 px-1.5 py-0.5 rounded-full font-bold">Connected</span>
+                    {(() => {
+                      const displayAddr = walletAddress || playerData?.wallet_address || '';
+                      return displayAddr ? (
+                        <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-3 flex flex-col gap-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Wallet</span>
+                            {walletConnected
+                              ? <span className="text-[9px] bg-green-900/50 text-green-400 border border-green-800/50 px-1.5 py-0.5 rounded-full font-bold">Connected</span>
+                              : <span className="text-[9px] bg-zinc-800 text-zinc-400 border border-zinc-700 px-1.5 py-0.5 rounded-full font-bold">Reward address</span>
+                            }
+                          </div>
+                          <div className="flex items-center gap-2 bg-black/40 rounded-lg px-2 py-1.5">
+                            <span className="text-[10px] font-mono text-zinc-300 flex-1 truncate">
+                              {displayAddr.slice(0, 8)}…{displayAddr.slice(-6)}
+                            </span>
+                            <button
+                              onClick={() => { navigator.clipboard.writeText(displayAddr); setAddressCopied(true); setTimeout(() => setAddressCopied(false), 2000); }}
+                              className="text-zinc-400 hover:text-white shrink-0 text-[9px] font-bold"
+                            >
+                              {addressCopied ? '✓ Copied' : 'Copy'}
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 bg-black/40 rounded-lg px-2 py-1.5">
-                          <span className="text-[10px] font-mono text-zinc-300 flex-1 truncate">
-                            {walletAddress.slice(0, 8)}…{walletAddress.slice(-6)}
-                          </span>
-                          <button
-                            onClick={() => { navigator.clipboard.writeText(walletAddress); setAddressCopied(true); setTimeout(() => setAddressCopied(false), 2000); }}
-                            className="text-zinc-400 hover:text-white shrink-0 text-[9px] font-bold"
-                          >
-                            {addressCopied ? '✓ Copied' : 'Copy'}
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={connectWallet}
-                        className="w-full bg-gradient-to-r from-purple-700 to-indigo-700 text-white py-3 rounded-xl text-xs font-bold tracking-wider hover:brightness-110 active:scale-95 transition-all"
-                      >
-                        🔌 Connect Celo Wallet
-                      </button>
-                    )}
+                      ) : (
+                        <button
+                          onClick={connectWallet}
+                          className="w-full bg-gradient-to-r from-purple-700 to-indigo-700 text-white py-3 rounded-xl text-xs font-bold tracking-wider hover:brightness-110 active:scale-95 transition-all"
+                        >
+                          🔌 Connect Celo Wallet
+                        </button>
+                      );
+                    })()}
 
                     {/* ── Balances ── */}
                     <div className="grid grid-cols-2 gap-2">
@@ -760,7 +778,7 @@ export default function HUD({
         </div>
 
         {/* 5. Bottom Navigation Bar */}
-        <div className="w-full grid grid-cols-6 border-t border-zinc-800 bg-zinc-950 pointer-events-auto">
+        <div className="w-full grid grid-cols-5 border-t border-zinc-800 bg-zinc-950 pointer-events-auto">
           {[
             { id: 'bag', label: 'Bag', icon: <Backpack size={16} /> },
             { id: 'loadout', label: 'Loadout', icon: <Sword size={16} /> },
@@ -789,7 +807,7 @@ export default function HUD({
           clearedZone={levelClearZone}
           playerData={playerData}
           setPlayerData={setPlayerData}
-          walletAddress={walletAddress || undefined}
+          walletAddress={walletAddress || playerData?.wallet_address || undefined}
           onContinue={() => setInLevelClear(false)}
         />
       )}

@@ -1,359 +1,225 @@
-# Fable 🗡️
+# Fable RPG
 
 > A mobile-first action RPG powered by GoodDollar's daily UBI on Celo. Explore pixel-art worlds, battle enemies, loot gear — and earn real G$ as you play.
 
-![Version](https://img.shields.io/badge/version-0.1.0-blueviolet)
-![Chain](https://img.shields.io/badge/chain-Celo-brightgreen)
+![Version](https://img.shields.io/badge/version-0.2.0-blueviolet)
+![Chain](https://img.shields.io/badge/chain-Celo%20Mainnet-brightgreen)
 ![Token](https://img.shields.io/badge/token-G%24-orange)
 ![Platform](https://img.shields.io/badge/platform-Mobile%20Web-blue)
-![Program](https://img.shields.io/badge/GoodBuilders-Season%204-gold)
+![Contract](https://img.shields.io/badge/contract-0x3939Fb4d-yellow)
 
 ---
 
 ## Table of Contents
 
 - [Overview](#overview)
+- [Onboarding Flow](#onboarding-flow)
 - [Gameplay](#gameplay)
 - [Game World](#game-world)
 - [Controls](#controls)
 - [Character & Progression](#character--progression)
-- [Loadout & Equipment](#loadout--equipment)
-- [Inventory System](#inventory-system)
-- [Combat Mechanics](#combat-mechanics)
 - [G$ Integration](#g-integration)
-- [UI Layout](#ui-layout)
-- [Navigation Tabs](#navigation-tabs)
+- [NFT Items](#nft-items)
+- [Level Rewards](#level-rewards)
+- [Profile Tab](#profile-tab)
 - [Tech Stack](#tech-stack)
 - [Project Structure](#project-structure)
+- [Smart Contract](#smart-contract)
 - [Getting Started](#getting-started)
 - [Environment Variables](#environment-variables)
-- [Smart Contracts](#smart-contracts)
-- [GoodBuilders KPIs](#goodbuilders-kpis)
 - [Roadmap](#roadmap)
-- [Contributing](#contributing)
 
 ---
 
 ## Overview
 
-**Fable** is a browser-based, mobile-first action RPG built on top of GoodDollar's UBI infrastructure on Celo. Players create a character, explore a hand-crafted pixel-art world, fight enemies across multiple biomes, collect loot, and level up — all while interacting with real G$ on-chain.
+**Fable** is a browser-based, mobile-first action RPG built on GoodDollar's UBI infrastructure on Celo. Players create a hero, explore hand-crafted pixel-art zones, fight enemies, collect loot, and level up — all while earning and spending real G$ on-chain.
 
-The core loop is designed around GoodDollar's daily claim mechanic: claiming your daily G$ from the UBI scheme unlocks in-game rewards, making Fable one of the few games where the blockchain moment is not a friction point but a natural part of the play session.
+G$ is not a cosmetic layer. It is the premium economic currency:
+- **Earn** G$ by completing combat zones (server-verified, one-time per wallet per level)
+- **Spend** G$ to buy NFT weapons and abilities as ERC-1155 tokens
+- **Claim** daily UBI from GoodDollar to activate an in-game XP/Gold buff
+- **Identity-gated** — only GoodDollar-verified humans can earn level rewards
 
-Built for the **GoodBuilders Season 4** program — $50K USD streamed in G$ via Superfluid, run in partnership with Flow State.
+The entire earn-and-spend loop runs on Celo mainnet through a single deployed contract.
+
+---
+
+## Onboarding Flow
+
+```
+Splash Screen (10s)
+       ↓
+   Auth Screen
+   ┌──────────┬──────────────┐
+   │  Wallet  │   Username   │
+   └──────────┴──────────────┘
+        │              │
+   Connect Celo    Type hero name
+   wallet          → Lookup in DB
+        │              │
+   Found?         Found? → Game ✅
+   ├── Yes → Game ✅
+   └── No  → Character Creation
+                  │
+            Enter name + class
+            (saved to wallet address)
+                  │
+              Game ✅
+```
+
+### Wallet Sign-In
+Connects to a Celo wallet (MetaMask, MiniPay, etc.). If a profile exists for that address in Supabase it loads immediately. If not, character creation is shown. The wallet auto-switches to Celo mainnet if the user is on the wrong network.
+
+### Username Sign-In
+For returning players on mobile or secondary devices who may not have their wallet extension available. Enter your hero's name — if a profile is found in the database the game loads directly. If no profile is found, a warning is shown to sign in with wallet first (username login only works for accounts that were created via wallet).
+
+When signed in via username, the game uses the wallet address stored in the player's Supabase profile for all on-chain activity. This means a player can sign in with their username on mobile, clear a zone, and the G$ reward is automatically sent to the wallet address that was used to create the account on desktop — no wallet extension needed on mobile.
+
+### Character Creation
+Only reached after wallet connection. Wallet address is stored as the primary key — the profile is permanently linked to that address across all devices.
 
 ---
 
 ## Gameplay
 
-Fable is a real-time action RPG with dual-stick controls. The player navigates an isometric/top-down pixel-art world, moving through zones of increasing difficulty, fighting enemies, collecting loot, managing equipment, and spending/earning G$ throughout.
+Fable is a real-time action RPG with dual-stick controls.
 
 **Core loop:**
-
 ```
-Daily G$ Claim → Enter Town Hub → Equip Gear → Enter Combat Zone → Kill Enemies
-      ↓                                                                     ↓
-  In-game buff/chest                                            Gold drops + XP + Loot
-      ↓                                                                     ↓
-  Spend G$ on gear/upgrades ←──────────────── Level Up + Return to Town ←──┘
+Splash → Auth → Town Hub → Equip Gear → Enter Zone → Kill Enemies
+                                ↑                          ↓
+                         Spend G$ on NFTs         Gold + XP + Loot drops
+                                ↑                          ↓
+                         Claim Daily UBI ←── Level Up + Zone Clear → Earn G$
 ```
 
-The session structure is pick-up-and-play friendly — a full run from town to zone clear takes 5–10 minutes, making it compatible with the daily-claim retention model.
+A full run from town to zone clear takes 5–10 minutes, compatible with the daily-claim retention model.
 
 ---
 
 ## Game World
 
-### Town (Hub)
+### Town Hub
+The central hub between runs. Contains the **Tavern** where players access the NFT item shop and claim daily UBI.
 
-The central hub players return to between runs. Contains:
+### Ember Fields (Zone 1)
+Volcanic lava biome. Enemies: **Imps** (fast, low HP) and **Lava Pumpkin Boss** (100 HP, heavy damage). Reward: **500 G$** on first clear.
 
-- **Tavern** — the primary NPC building; enter for quests, story beats, and eventually the daily G$ claim UI
-- **Environment** — a mixed desert-lush biome with cacti, palm trees, oasis pools, dirt paths, farmlands, and stone ruins at the edges
-- **World navigation** — players walk freely around the hub before entering combat zones via the `Enter TAVERN` / zone portals
+### Ashwater Marsh (Zone 2)
+Swamp biome with poison mechanics. Enemies: **Poison Slimes** and **Swamp Hydra Boss**. Reward: **1,000 G$** on first clear.
 
-The town environment uses a warm isometric tile set with lava seeping in at the borders, hinting at the encroaching danger of nearby combat zones.
-
-### Ember Fields (Lv 1–2)
-
-The first combat zone. A volcanic lava biome with:
-
-- Rivers of lava cutting across the terrain
-- Scorched dirt paths winding through rock formations
-- Dried-out trees and charred wreckage
-- Lava geysers and flame vents as environmental hazards
-
-**Zone label format:** `Zone Name (LvX–Y)` displayed in red at the top of screen during combat.
-
-**Known enemies in Ember Fields:**
-- **Lava Pumpkin Boss** — large stone/pumpkin hybrid creature with 100HP, glowing carved face, claw arms. Stationary threat that deals heavy damage at close range.
-- **Imp (Lv2)** — small red ember imps, fast-moving, low HP, group in packs. Drop gold and consumables on death.
-
-More zones are planned for later seasons (see Roadmap).
+### Obsidian Peak (Zone 3)
+Summit volcanic zone — the hardest area. Enemies: **Obsidian Golems** and **Fire Demon Boss**. Reward: **2,000 G$** on first clear.
 
 ---
 
 ## Controls
 
-Fable uses a **dual virtual joystick** layout designed for one-thumb or two-thumb mobile play.
-
-```
-┌──────────────────────────────────────┐
-│           [ZONE NAME]       [AVATAR] │
-│                                      │
-│         [ GAME WORLD ]               │
-│                                      │
-│  [L-STICK]              [R-STICK]    │
-│                          [ ABILITY ] │
-└──────────────────────────────────────┘
-```
+Fable uses a **dual virtual joystick** layout for mobile.
 
 | Control | Action |
 |---|---|
-| **Left joystick** | Move character in all directions |
-| **Right joystick** | Attack / aim direction |
-| **Ability button** (bottom-right) | Trigger equipped active skill (with cooldown timer) |
-| **Tap interactive object** | Context actions — `Enter TAVERN`, pick up loot, open chest |
-| **Bottom tab bar** | Open inventory panels without pausing movement |
-
-### Ability Cooldown
-
-The ability button displays a **radial cooldown arc** that depletes and refills. Confirmed cooldown observed: ~4-second cycle. Only one active ability slot is visible in the current build.
+| Left joystick | Move character |
+| Right joystick | Aim / attack direction |
+| Ability button | Trigger equipped active skill (cooldown) |
+| Bottom tab bar | Open panels without pausing |
+| Flee to Town | Exit zone and return to hub |
 
 ---
 
 ## Character & Progression
 
-### Character Creation / Selection
+### Classes
 
-On the main screen, the player selects or creates a character. Current build shows:
-
-- **Pixel avatar portrait** (green background, 32×32 style)
-- **Character name** (e.g., `Test Run`)
-- **Genre tag**: `Action RPG`
-- **Version string**: `v2.3.307 · 2d5c88a`
-- **PLAY** button (CTA, purple/blue)
+| Class | HP | Strength | Agility | Defense |
+|---|---|---|---|---|
+| **Knight** | 130 | 12 | 8 | 12 |
+| **Ranger** | 100 | 10 | 15 | 8 |
+| **Berserker** | 160 | 16 | 6 | 10 |
 
 ### Stats
+- **XP** — earned from kills, levels up character
+- **Gold** — in-game soft currency, earned from kills, spent on potions
+- **Stat Points** — allocated on level-up to Strength, Agility, Defense, Vitality (+15 Max HP per Vitality point)
 
-Stats are tracked in the bottom-right panel labelled `STATS · SKILLS`. The following stat rows are visible with icon indicators:
-
-| Icon | Stat | Observed Default |
-|---|---|---|
-| ⚔️ Sword | Attack / Physical Damage | 0 |
-| ❤️ Heart | HP / Vitality | 0 |
-| 🔧 Wrench | Crafting / Repair | 0 |
-| 💎 Diamond | Magic / Special | 0 |
-| 🌿 Leaf | Nature / Resistance | 0 |
-| 💧 Drop | Stamina / Mana | 0 |
-
-Stats scale with equipped gear and level-ups. The panel shows numeric values next to each icon pair.
-
-### Levelling
-
-- **XP gain** shown as floating green `+22 XP` text on kill
-- **Level** displayed on the avatar chip in the top-right corner (e.g., `Lv 1`)
-- Level-up logic and stat point allocation TBD in v0.2
-
-### Gold (In-Game Currency)
-
-- Displayed as `🪙 [amount]` in the top-right avatar chip
-- Starting amount observed: `50`
-- Gold earned from kills: `+6G` floating text
-- Gold decreases as you spend at the tavern / on gear (observed drop from 50 → 5 during Ember Fields run)
-
----
-
-## Loadout & Equipment
-
-The **Loadout** panel (bottom-left of HUD) shows equipped gear and active stats.
-
-### Equipment Slots
-
-```
-┌─────────────────────────────────────────┐
-│  LOADOUT          DMG 24-40  DPS 53.3   │
-│  ┌────────┐  ┌────────┐                 │
-│  │ AMULET │  │ WEAPON │                 │
-│  └────────┘  └────────┘                 │
-│     CHEST         LEGS                  │
-└─────────────────────────────────────────┘
-```
-
-| Slot | Visible in Build | Notes |
-|---|---|---|
-| Amulet | ✅ | Equippable, shows icon |
-| Weapon | ✅ | Bamboo Stick confirmed |
-| Chest | ✅ (slot label) | Empty in demo |
-| Legs | ✅ (slot label) | Empty in demo |
-| Shield | ✅ (slot label) | Listed under SHIELD / AMULET / MELEE row |
-| Bag | ✅ (slot label) | Opens inventory panel |
-
-### Confirmed Weapons
-
-**Bamboo Stick**
-- Type: `Wood · Sword`
-- DMG: `24–40`
-- DPS: `53.3`
-- Actions: `Equip`, `Lock`, `X (dismiss)`
-
-The item card shows item name, type tags, and a stat summary with action buttons.
-
----
-
-## Inventory System
-
-The **Bag** panel slides up from the bottom. It has five filter tabs:
-
-| Tab Icon | Category |
-|---|---|
-| 🔵 Circle | All items |
-| ❌ Cross | Consumables / misc |
-| 🛡️ Shield | Armor |
-| 🗡️ Dagger | Weapons |
-| ⛏️ Pickaxe | Materials / crafting |
-
-**Empty state:** `Bag is empty.` with helper text `Tap to open.`
-
-**Confirmed loot items** picked up during Ember Fields run:
-- `🔥 Fire item` (x2, then x3, x4, x5) — likely ember/flame consumable
-- `🦗 Scorpion/bug item` — dropped by imps
-
-Items stack in the bag with a count badge in the corner of the slot. Tapping an item opens the item detail card with the equip/lock/dismiss UI.
-
----
-
-## Combat Mechanics
-
-### Real-Time Combat
-
-Combat is fully real-time. The player character auto-attacks when enemies are within weapon range. The right joystick orients the attack direction.
-
-### Damage Numbers
-
-Floating damage numbers appear above enemies on hit:
-- White numbers = standard hit (e.g., `15`, `39`)
-- Implied crit/special colouring TBD
-
-### BLOCK
-
-A `BLOCK` mechanic is confirmed — blue floating text displays `BLOCK` above the character when an incoming attack is successfully blocked. This appears to be triggered automatically or via directional input (details TBD in implementation docs).
-
-### Enemy HP Bars
-
-Enemies display a yellow HP bar above their sprite. Boss bar observed at `100` HP. Imp enemies have smaller bars scaled to their HP pool.
-
-### Death & Loot
-
-On enemy death:
-- Gold coins animate dropping to the ground (`6G` observed)
-- Loot items drop and glow for pickup
-- XP floats up in green text (`+22 XP`)
-- Player auto-collects nearby drops on proximity
+### Zone Clear Screen
+After beating a boss, a zone clear screen shows:
+- G$ reward status (claiming / claimed / already claimed / not verified)
+- Current HP and potion shop (buy with gold)
+- Continue button to next zone
 
 ---
 
 ## G$ Integration
 
-This is where Fable diverges from a standard mobile RPG. G$ is not cosmetic — it is the premium economic layer that gives the game real on-chain stakes.
+### Trustless Item Purchases
+Users buy NFT items directly via `transferAndCall` on the G$ token — a single transaction that transfers G$ and mints the NFT atomically. No server middleman, no approval step.
 
-### Integration Points
+```
+gToken.transferAndCall(fableItemsAddress, price, abi.encode(tokenId))
+  → G$ forwarded to treasury
+  → NFT minted to buyer
+```
 
-**1. Daily UBI Claim → In-Game Reward**
+### Level Rewards (Server-Verified)
+When a player clears a zone, the frontend calls `/api/claim-level-reward`. The server verifies and calls `grantLevelReward(player, levelId)` on-chain using an admin key. The contract:
+1. Checks the player hasn't already claimed this level (`levelClaimed` mapping)
+2. Checks the player is GoodDollar-verified (`getWhitelistedRoot` on IdentityV2)
+3. Transfers G$ from the reward pool to the player
 
-The Tavern contains a `Claim Daily G$` button that calls GoodDollar's `UBIScheme` claim function on Celo. Successfully claiming:
-- Grants an in-game daily buff (e.g., +10% XP for the session)
-- Unlocks a daily loot chest in the tavern
-- Registers the player's wallet as an active daily user (key GoodBuilders KPI)
+New levels can be added at any time via `setLevelReward(levelId, amount)` — no redeployment needed.
 
-**2. G$ as Premium Currency**
+### Daily UBI Claim
+The Profile tab has a **Claim Daily G$ UBI** button that calls `UBIScheme.claim()` on Celo. Successfully claiming activates a 24-hour **+50% XP & Gold buff** in-game.
 
-G$ is the hard-currency layer above soft gold:
-- Gear bundles purchasable with G$ at the tavern
-- Revive tokens (continue after death in a zone) cost G$
-- Stamina refills (extra daily runs) cost G$
-
-**3. G$ Sinks (Deflationary Mechanics)**
-
-- Zone entry fee for higher-tier zones (5 G$ to enter Ember Fields Elite, etc.)
-- Crafting fee when combining loot materials into gear
-- Cosmetic skins and avatar upgrades
-
-**4. G$ Earning (Controlled Faucet)**
-
-To avoid bot-farming, G$ rewards are capped and structured:
-- Soft gold (in-game) is earned freely from mob drops — this is off-chain
-- G$ is only distributed at zone completion (not per kill) — one claim per wallet per zone per day
-- Weekly leaderboard rewards: top 10 players by zone clears share a G$ prize pool
-
-### Wallet Integration
-
-- **MiniPay** (primary) — Celo's lightweight mobile wallet, largest user base in Africa
-- **Valora** (secondary)
-- **WalletConnect** (fallback)
-
-### Relevant Contracts (Celo Mainnet)
-
-| Contract | Address |
-|---|---|
-| GoodDollar (G$) | `0x62B8B11039FcfE5aB0C56E502b836208dA855E96` |
-| UBIScheme | `0xAACbaaB8571cbECEB46ba85B5981efDB8928545e` |
-| GoodReserveCDai | `0x6C35677206ae073A0f4801B88934Ef0F78b3E355` |
+### GoodDollar Identity
+Level rewards require GoodDollar face verification. Unverified players see an orange banner with a link to `wallet.gooddollar.org` to complete verification. Uses `getWhitelistedRoot()` which works for both primary and linked secondary wallets.
 
 ---
 
-## UI Layout
+## NFT Items
 
-Full portrait layout (`480×1040` native, mobile-first):
+All items are ERC-1155 tokens on Celo mainnet. Token ID is the item type — multiple players can own the same item.
 
-```
-┌──────────────────────────────┐
-│  ← [ZONE NAME]    [AVATAR]   │  ← Top bar: back, zone label, player chip
-│                              │     Avatar chip shows: name, level, 🪙 gold
-│                              │
-│                              │
-│       [ GAME VIEWPORT ]      │  ← Isometric world render
-│                              │
-│                              │
-│  [L-JOYSTICK]  [R-JOYSTICK]  │  ← Dual virtual sticks
-│                  [ ABILITY ] │  ← Radial cooldown button (bottom-right)
-│                    [ CHAT  ] │  ← Chat/emote button
-├──────────────────────────────┤
-│  [ BAG PANEL ]               │  ← Slides up from bottom
-│  Tabs: All | Misc | Armor |  │
-│         Weapon | Material    │
-│  [ item grid ]               │
-├──────────────────────────────┤
-│ Bag Friends Codex Journey    │  ← Bottom nav bar (5 tabs + More)
-│               Map   More     │
-└──────────────────────────────┘
-```
+| # | Item | Type | Effect | G$ Price |
+|---|---|---|---|---|
+| 1 | Iron Sword | Weapon | +12 ATK | 2,193 G$ |
+| 2 | Ember Blade | Weapon | +15 ATK | 4,386 G$ |
+| 3 | Obsidian Greatsword | Weapon | +60 ATK | 6,579 G$ |
+| 4 | Fire Nova | Ability | AoE Blast | 8,772 G$ |
+| 5 | Poison Cloak | Ability | 10s Slow | 13,158 G$ |
+| 6 | Stone Shield | Ability | 20s +DEF | 17,544 G$ |
 
-**Town-specific additional HUD:**
-
-```
-├──────────────────────────────┤
-│   [BAG]  LOADOUT  STATS·SKILLS│
-│          DMG · DPS           │
-│  [Amulet][Weapon]            │
-│  CHEST        LEGS           │
-└──────────────────────────────┘
-```
+Metadata: `ipfs://bafybeianypngy35lzwcl6myqx6fzbghknu6iire3ezj4jwsieuy6jlbaxu/`
 
 ---
 
-## Navigation Tabs
+## Level Rewards
 
-The bottom tab bar provides access to all game panels:
+| Level | Zone | G$ Reward | USD Value |
+|---|---|---|---|
+| 1 | Ember Fields | 500 G$ | ~$0.50 |
+| 2 | Ashwater Marsh | 1,000 G$ | ~$1.00 |
+| 3 | Obsidian Peak | 2,000 G$ | ~$2.00 |
 
-| Tab | Function |
-|---|---|
-| **Bag** | Opens inventory panel (all loot, equipment, materials) |
-| **Friends** | Social — friend list, co-op invite (future) |
-| **Codex** | Encyclopedia — enemy bestiary, item descriptions, lore |
-| **Journey** | Quest log / story progression |
-| **Map** | World map — zone selection, zone level indicators |
-| **More** | Settings, wallet connection, daily claim, leaderboard |
+Rewards are claimable **once per wallet address per level**. Protected by both on-chain mapping and GoodDollar identity verification.
+
+---
+
+## Profile Tab
+
+The in-game Profile tab (bottom nav) shows everything about the player in one place:
+
+- **Wallet** — connected address with copy button, or Connect Wallet button
+- **G$ Balance** — live on-chain balance with refresh
+- **Gold** — in-game token balance
+- **Level / Zones Cleared / NFTs Owned** — progress stats
+- **Zones cleared** — badges for each cleared zone
+- **Weapons** — full arsenal with equipped indicator and NFT gem icon
+- **Abilities** — NFT abilities owned
+- **Active Buffs** — UBI buff status
+- **Claim Daily G$ UBI** — one-tap claim button
 
 ---
 
@@ -361,16 +227,17 @@ The bottom tab bar provides access to all game panels:
 
 | Layer | Technology |
 |---|---|
-| Frontend | Next.js 14, TypeScript, Tailwind CSS |
-| Game Engine | Phaser 3 (WebGL renderer, mobile input plugin) |
-| Wallet | MiniPay SDK, WalletConnect v2, Viem |
-| Chain | Celo Mainnet |
-| Token | GoodDollar (G$) — ERC-20 |
-| UBI Claim | GoodDollar UBIScheme contract |
-| Streaming | Superfluid (for GoodBuilders G$ stream) |
-| Backend | Supabase (player profiles, leaderboard, off-chain gold) |
-| Auth | Wallet-based (sign-in with Celo address) |
-| Hosting | Vercel / Cloudflare Pages |
+| Frontend | Next.js 15, TypeScript, Tailwind CSS v4 |
+| Game Engine | Phaser 3 (WebGL, mobile input) |
+| Blockchain | Viem, Celo Mainnet (chain ID 42220) |
+| Token | GoodDollar G$ — ERC-20 + ERC-677 |
+| NFTs | ERC-1155 (FableItems contract) |
+| Identity | GoodDollar IdentityV2 (`getWhitelistedRoot`) |
+| UBI | GoodDollar UBIScheme |
+| Database | Supabase (player profiles, leaderboard, reward audit log) |
+| Auth | Wallet address (primary) + username fallback |
+| Hosting | Vercel |
+| Contract tooling | Foundry (forge) |
 
 ---
 
@@ -378,85 +245,102 @@ The bottom tab bar provides access to all game panels:
 
 ```
 fable/
-├── app/                        # Next.js app router
-│   ├── page.tsx                # Entry — character select screen
-│   ├── game/
-│   │   └── page.tsx            # Phaser game mount
+├── app/
+│   ├── page.tsx                    # Splash → Auth → Character creation → Game
 │   └── api/
-│       ├── claim/route.ts      # G$ daily claim handler
-│       ├── leaderboard/route.ts
-│       └── player/route.ts
-├── game/                       # Phaser 3 source
-│   ├── scenes/
-│   │   ├── BootScene.ts        # Asset preload
-│   │   ├── MainMenuScene.ts    # Character select
-│   │   ├── TownScene.ts        # Hub world
-│   │   ├── EmberFieldsScene.ts # Combat zone 1
-│   │   └── UIScene.ts          # Persistent HUD overlay
-│   ├── entities/
-│   │   ├── Player.ts           # Player class, stats, movement
-│   │   ├── Enemy.ts            # Base enemy class
-│   │   ├── LavaPumpkin.ts      # Boss entity
-│   │   └── Imp.ts              # Basic mob
-│   ├── systems/
-│   │   ├── CombatSystem.ts     # Hit detection, damage, block
-│   │   ├── InventorySystem.ts  # Bag, loadout, item management
-│   │   ├── LootSystem.ts       # Drop tables, pickup logic
-│   │   └── GoldSystem.ts       # Soft currency tracking
-│   └── config/
-│       └── gameConfig.ts       # Phaser config, resolution, input
-├── contracts/                  # Integration ABIs + helpers
-│   ├── gooddollar.ts           # G$ ERC-20 ABI
-│   └── ubischeme.ts            # Claim function ABI
+│       ├── claim-level-reward/     # Server grants G$ after zone clear
+│       └── mint-item/              # Deprecated (purchases now via transferAndCall)
 ├── components/
-│   ├── WalletConnect.tsx
-│   ├── ClaimButton.tsx         # Daily G$ claim UI
-│   └── Leaderboard.tsx
+│   ├── HUD.tsx                     # In-game heads-up display
+│   ├── TavernShop.tsx              # NFT item shop (buy with G$)
+│   └── LevelClearScreen.tsx        # Zone clear + G$ reward + potion shop
+├── game/                           # Phaser 3 scenes and systems
+│   └── scenes/
+│       ├── TownScene.ts
+│       ├── EmberFieldsScene.ts
+│       ├── AshwaterMarshScene.ts
+│       └── ObsidianPeakScene.ts
 ├── lib/
-│   ├── celo.ts                 # Viem Celo client
-│   ├── supabase.ts
-│   └── gooddollar.ts           # Claim + balance helpers
-├── public/
-│   └── assets/
-│       ├── sprites/            # Pixel character + enemy sprites
-│       ├── tilesets/           # Town + Ember Fields tiles
-│       ├── ui/                 # HUD elements, icons, buttons
-│       └── audio/              # SFX + ambient tracks
-└── README.md
+│   ├── celo.ts                     # Viem client, buyItem, claimUBI, ensureCeloNetwork
+│   ├── nft.ts                      # Contract address, ABI, item/zone definitions
+│   └── supabaseClient.ts           # DB service, player CRUD, reward audit log
+├── supabase_schema.sql             # Full DB schema (run in Supabase SQL editor)
+└── contract/
+    ├── src/FableItems.sol          # ERC-1155 + G$ earn/spend contract
+    └── test/FableItems.t.sol       # 27 Foundry tests
 ```
+
+---
+
+## Smart Contract
+
+**FableItems** — deployed on Celo mainnet
+
+| Field | Value |
+|---|---|
+| Address | `0x3939Fb4dc682A25c3581AF101f47A9bA6032a5eb` |
+| Admin | `0x5Ab64c56Df2d01A0c76534E01b6a06Cd3d79391C` |
+| G$ Token | `0x62B8B11039FcfE5aB0C56E502b1C372A3d2a9c7A` |
+| Treasury | `0x91487d8BC1B573f0BC6c23dE7BA23d50F49F627B` |
+| Identity | `0xC361A6E67822a0EDc17D899227dd9FC50BD62F42` |
+| Metadata | `ipfs://bafybeianypngy35lzwcl6myqx6fzbghknu6iire3ezj4jwsieuy6jlbaxu/` |
+
+### Key Functions
+
+| Function | Who | Purpose |
+|---|---|---|
+| `onTokenTransfer(from, value, data)` | G$ token (user-triggered) | Buy NFT item via transferAndCall |
+| `grantLevelReward(player, levelId)` | Admin | Pay G$ reward after zone clear |
+| `setLevelReward(levelId, amount)` | Admin | Set reward for a level (no redeploy) |
+| `setPrice(tokenId, price)` | Admin | Set item price |
+| `setIdentityContract(address)` | Admin | Enable/disable identity check |
+| `withdrawRewardPool(amount)` | Admin | Reclaim unspent G$ from reward pool |
+
+### Post-Deploy Setup
+After deployment call these as admin:
+
+```
+setPrice(1, 2193000000000000000000)   // Iron Sword
+setPrice(2, 4386000000000000000000)   // Ember Blade
+setPrice(3, 6579000000000000000000)   // Obsidian Greatsword
+setPrice(4, 8772000000000000000000)   // Fire Nova
+setPrice(5, 13158000000000000000000)  // Poison Cloak
+setPrice(6, 17544000000000000000000)  // Stone Shield
+
+setLevelReward(1, 500000000000000000000)   // Ember Fields: 500 G$
+setLevelReward(2, 1000000000000000000000)  // Ashwater Marsh: 1000 G$
+setLevelReward(3, 2000000000000000000000)  // Obsidian Peak: 2000 G$
+```
+
+Then send G$ directly to the contract address to fund the reward pool.
 
 ---
 
 ## Getting Started
 
 ### Prerequisites
-
 - Node.js `>=18`
-- A Celo wallet (MiniPay or Valora recommended for mobile testing)
+- pnpm
+- A Celo wallet with G$ (MetaMask with Celo mainnet, or MiniPay)
 - Supabase project
-- G$ on Celo mainnet (small amount for testing sinks)
+- Foundry (`curl -L https://foundry.paradigm.xyz | bash`)
 
-### Install
+### Install & Run
 
 ```bash
-git clone https://github.com/yourhandle/fable.git
-cd fable
-npm install
+git clone https://github.com/Godbrand0/fable.git
+cd fable/fable
+pnpm install
+pnpm dev
 ```
 
-### Run Dev Server
+Open `http://localhost:3000` — use Chrome DevTools mobile emulation at 480px width.
+
+### Run Contract Tests
 
 ```bash
-npm run dev
-```
-
-Open `http://localhost:3000` on a mobile browser or use Chrome DevTools device emulation at `480×1040`.
-
-### Build
-
-```bash
-npm run build
-npm start
+cd contract
+forge test
 ```
 
 ---
@@ -467,105 +351,48 @@ npm start
 # Celo RPC
 NEXT_PUBLIC_CELO_RPC_URL=https://forno.celo.org
 
-# GoodDollar contracts (Celo Mainnet)
-NEXT_PUBLIC_GOODDOLLAR_ADDRESS=0x62B8B11039FcfE5aB0C56E502b836208dA855E96
-NEXT_PUBLIC_UBISCHEME_ADDRESS=0xAACbaaB8571cbECEB46ba85B5981efDB8928545e
+# Contracts
+NEXT_PUBLIC_FABLE_ITEMS_ADDRESS=0x3939Fb4dc682A25c3581AF101f47A9bA6032a5eb
+NEXT_PUBLIC_GOODDOLLAR_ADDRESS=0x62B8B11039FcfE5aB0C56E502b1C372A3d2a9c7A
+NEXT_PUBLIC_UBISCHEME_ADDRESS=0x43d72Ff17701B2DA814620735C39C620Ce0ea4A1
+NEXT_PUBLIC_IDENTITY_ADDRESS=0xC361A6E67822a0EDc17D899227dd9FC50BD62F42
 
 # Supabase
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 
-# WalletConnect
-NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your_project_id
+# Server-side (Vercel env, never commit)
+ADMIN_PRIVATE_KEY=your_deployer_private_key
 ```
-
----
-
-## Smart Contracts
-
-Fable does not deploy custom contracts in v0.1. All on-chain interaction is with existing GoodDollar protocol contracts on Celo.
-
-| Interaction | Contract | Function |
-|---|---|---|
-| Check G$ balance | G$ ERC-20 | `balanceOf(address)` |
-| Daily UBI claim | UBIScheme | `claim()` |
-| Check claim eligibility | UBIScheme | `checkEntitlement(address)` |
-| Transfer G$ (gear purchase) | G$ ERC-20 | `transfer(to, amount)` |
-
-Custom escrow and reward distribution contracts will be introduced in v0.2 for the zone completion G$ payout mechanic.
-
----
-
-## GoodBuilders KPIs
-
-These are the committed weekly metrics for GoodBuilders Season 4:
-
-| Metric | Target (Week 12) |
-|---|---|
-| Daily active G$ claimers via Fable | 500 |
-| G$ transactions (sinks + rewards) | 2,000 / week |
-| G$ volume transacted in-game | 10,000 G$ / week |
-| D7 player retention | ≥ 25% |
-| Registered wallets | 2,000 |
-| Zones cleared (aggregate) | 5,000 / week |
-
-Weekly updates published on Flow State with on-chain evidence (transaction hashes, Dune dashboard).
 
 ---
 
 ## Roadmap
 
-### v0.1 — GoodBuilders Launch (Weeks 1–4)
-- [x] Core game loop (Town → Ember Fields → combat → loot)
-- [x] Dual joystick controls
-- [x] Bag + Loadout system
-- [x] Basic enemy AI (Imp, Lava Pumpkin Boss)
-- [ ] MiniPay wallet connect
-- [ ] Daily G$ claim → in-game buff
-- [ ] Soft gold tracking on Supabase
-- [ ] Ember Fields zone complete screen
+### Done
+- [x] Three combat zones (Ember Fields, Ashwater Marsh, Obsidian Peak)
+- [x] Dual joystick controls, boss fights, terrain obstacles
+- [x] ERC-1155 NFT contract deployed on Celo mainnet
+- [x] Trustless item purchases via G$ `transferAndCall`
+- [x] Level rewards — earn G$ on zone clear (GoodDollar identity gated)
+- [x] GoodDollar identity verification (`getWhitelistedRoot`)
+- [x] Daily UBI claim → +50% XP/Gold buff
+- [x] Wallet + username onboarding with Supabase persistence
+- [x] Profile tab (balance, NFTs, zones, weapons, buffs)
+- [x] Auto-switch wallet to Celo mainnet
 
-### v0.2 — Economy Layer (Weeks 5–8)
-- [ ] Tavern shop (buy gear with G$)
-- [ ] Zone completion G$ reward (1x per wallet per day)
-- [ ] Revive system (costs G$)
-- [ ] Item crafting (materials → gear, G$ fee)
-- [ ] Weekly leaderboard with G$ prize pool
-
-### v0.3 — Expansion (Weeks 9–12)
-- [ ] Zone 2: Ashwater Marsh (Lv 3–5)
-- [ ] Friends + co-op party system
-- [ ] Codex (bestiary + lore)
-- [ ] Journey (quest log with G$ quest rewards)
-- [ ] Character cosmetics (avatar skins, purchasable with G$)
-
-### Post-Season
-- [ ] Zone 3+
+### Next
+- [ ] Leaderboard (weekly zone clears, G$ prize pool)
+- [ ] MiniPay deep integration
+- [ ] Additional zones beyond Obsidian Peak
+- [ ] Item crafting (combine loot materials, G$ fee)
 - [ ] PvP arena (stake G$, winner takes pool)
-- [ ] Guild system
-- [ ] Full Superfluid streaming income for top guilds
-
----
-
-## Contributing
-
-Pull requests welcome. Please open an issue first for any significant change.
-
-```bash
-# Branch naming
-feat/zone-ashwater-marsh
-fix/block-mechanic-hitbox
-chore/update-gooddollar-abi
-```
-
-For game content contributions (sprites, tilesets, audio), open an issue tagged `[art]` or `[audio]` with a preview.
 
 ---
 
 ## License
 
-MIT © Godbrand — Built for GoodBuilders Season 4 in partnership with GoodDollar & Flow State.
+MIT © Godbrand — Built on GoodDollar & Celo.
 
 ---
 

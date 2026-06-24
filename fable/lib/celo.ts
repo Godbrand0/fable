@@ -6,6 +6,11 @@ const CELO_RPC = process.env.NEXT_PUBLIC_CELO_RPC_URL || 'https://forno.celo.org
 
 export const G$_ADDRESS = (process.env.NEXT_PUBLIC_GOODDOLLAR_ADDRESS || '0x62B8B11039FcfE5aB0C56E502b1C372A3d2a9c7A') as `0x${string}`;
 export const UBISCHEME_ADDRESS = (process.env.NEXT_PUBLIC_UBISCHEME_ADDRESS || '0x43d72Ff17701B2DA814620735C39C620Ce0ea4A1') as `0x${string}`;
+export const IDENTITY_ADDRESS = (process.env.NEXT_PUBLIC_IDENTITY_ADDRESS || '0xC361A6E67822a0EDc17D899227dd9FC50BD62F42') as `0x${string}`;
+
+export const IDENTITY_ABI = parseAbi([
+  'function getWhitelistedRoot(address account) view returns (address)',
+]);
 
 export const G$_ABI = parseAbi([
   'function balanceOf(address owner) view returns (uint256)',
@@ -27,6 +32,33 @@ export const publicClient = createPublicClient({
 export const celoService = {
   hasInjectedProvider(): boolean {
     return typeof window !== 'undefined' && typeof (window as any).ethereum !== 'undefined';
+  },
+
+  // Switch the connected wallet to Celo mainnet. Call before any write transaction.
+  async ensureCeloNetwork(): Promise<void> {
+    if (!this.hasInjectedProvider()) return;
+    try {
+      await (window as any).ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: '0xa4ec' }], // 42220 in hex
+      });
+    } catch (switchError: any) {
+      // Chain not added to wallet — add it
+      if (switchError.code === 4902) {
+        await (window as any).ethereum.request({
+          method: 'wallet_addEthereumChain',
+          params: [{
+            chainId: '0xa4ec',
+            chainName: 'Celo',
+            nativeCurrency: { name: 'CELO', symbol: 'CELO', decimals: 18 },
+            rpcUrls: ['https://forno.celo.org'],
+            blockExplorerUrls: ['https://explorer.celo.org'],
+          }],
+        });
+      } else {
+        throw switchError;
+      }
+    }
   },
 
   async getConnectedAddress(): Promise<string | null> {
@@ -89,6 +121,20 @@ export const celoService = {
     }
   },
 
+  async isGoodDollarVerified(address: string): Promise<boolean> {
+    try {
+      const root = await publicClient.readContract({
+        address: IDENTITY_ADDRESS,
+        abi: IDENTITY_ABI,
+        functionName: 'getWhitelistedRoot',
+        args: [address as `0x${string}`],
+      });
+      return root !== '0x0000000000000000000000000000000000000000';
+    } catch {
+      return false;
+    }
+  },
+
   async claimUBI(address: string): Promise<boolean> {
     if (!this.hasInjectedProvider()) {
       const today = new Date().toDateString();
@@ -97,18 +143,14 @@ export const celoService = {
       localStorage.setItem(`fable_mock_g$_bal_${address.toLowerCase()}`, (currentBal + 10).toFixed(2));
       return true;
     }
-    try {
-      const walletClient = createWalletClient({ chain: celo, transport: custom((window as any).ethereum) });
-      const { request } = await publicClient.simulateContract({
-        account: address as `0x${string}`, address: UBISCHEME_ADDRESS, abi: UBISCHEME_ABI, functionName: 'claim',
-      });
-      const hash = await walletClient.writeContract(request);
-      const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      return receipt.status === 'success';
-    } catch (err) {
-      console.error('UBI Claim failed:', err);
-      return false;
-    }
+    await this.ensureCeloNetwork();
+    const walletClient = createWalletClient({ chain: celo, transport: custom((window as any).ethereum) });
+    const { request } = await publicClient.simulateContract({
+      account: address as `0x${string}`, address: UBISCHEME_ADDRESS, abi: UBISCHEME_ABI, functionName: 'claim',
+    });
+    const hash = await walletClient.writeContract(request);
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    return receipt.status === 'success';
   },
 
   // Buy a Fable item: transfers G$ and mints the NFT in one transaction via transferAndCall.
@@ -130,6 +172,7 @@ export const celoService = {
     }
 
     try {
+      await this.ensureCeloNetwork();
       const walletClient = createWalletClient({ chain: celo, transport: custom((window as any).ethereum) });
       const { request } = await publicClient.simulateContract({
         account: walletAddress as `0x${string}`,

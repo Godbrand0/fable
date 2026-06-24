@@ -102,11 +102,20 @@ function toDbRow(player: PlayerData) {
 export const dbService = {
   isMocked: !isConfigured,
 
+  // Checks Supabase ONLY — used for wallet auth so localStorage can't ghost-login a player.
+  async getPlayerFromDB(walletAddress: string): Promise<PlayerData | null> {
+    const address = walletAddress.toLowerCase();
+    if (!supabase) return null;
+    const { data, error } = await supabase.from('players').select('*').eq('wallet_address', address).maybeSingle();
+    if (error || !data) return null;
+    return withDefaults(data);
+  },
+
   async getPlayer(walletAddress: string): Promise<PlayerData | null> {
     const address = walletAddress.toLowerCase();
     if (supabase) {
-      const { data, error } = await supabase.from('players').select('*').eq('wallet_address', address).single();
-      if (!error && data) return withDefaults(data as Partial<PlayerData>);
+      const { data, error } = await supabase.from('players').select('*').eq('wallet_address', address).maybeSingle();
+      if (!error && data) return withDefaults(data);
     }
     const players = JSON.parse(localStorage.getItem(LOCAL_KEY) || '{}');
     return players[address] ? withDefaults(players[address]) : null;

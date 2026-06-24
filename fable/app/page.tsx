@@ -78,12 +78,12 @@ export default function Home() {
       setWalletConnected(true);
       refreshBalance(addr);
 
-      const existing = await dbService.getPlayer(addr);
+      // DB-only check — localStorage must not bypass character creation
+      const existing = await dbService.getPlayerFromDB(addr);
       if (existing) {
         setPlayerData(existing);
         setPhase('playing');
       } else {
-        // New wallet — go to character creation
         setPhase('creating');
       }
     } catch {
