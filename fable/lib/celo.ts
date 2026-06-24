@@ -1,17 +1,16 @@
-import { createPublicClient, createWalletClient, custom, http, parseAbi } from 'viem';
+import { createPublicClient, createWalletClient, custom, http, parseAbi, encodeAbiParameters, parseAbiParameters, parseUnits } from 'viem';
 import { celo } from 'viem/chains';
 import { FABLE_ITEMS_ADDRESS, FABLE_ITEMS_ABI, NftItem } from './nft';
 
 const CELO_RPC = process.env.NEXT_PUBLIC_CELO_RPC_URL || 'https://forno.celo.org';
 
-export const G$_ADDRESS = (process.env.NEXT_PUBLIC_GOODDOLLAR_ADDRESS || '0x62B8B11039FcfE5aB0C56E502b836208dA855E96') as `0x${string}`;
+export const G$_ADDRESS = (process.env.NEXT_PUBLIC_GOODDOLLAR_ADDRESS || '0x62B8B11039FcfE5aB0C56E502b1C372A3d2a9c7A') as `0x${string}`;
 export const UBISCHEME_ADDRESS = (process.env.NEXT_PUBLIC_UBISCHEME_ADDRESS || '0xAACbaaB8571cbECEB46ba85B5981efDB8928545e') as `0x${string}`;
-export const GAME_TREASURY_ADDRESS = (process.env.NEXT_PUBLIC_GAME_TREASURY_ADDRESS || '0x62B8B11039FcfE5aB0C56E502b836208dA855E96') as `0x${string}`;
 
 export const G$_ABI = parseAbi([
   'function balanceOf(address owner) view returns (uint256)',
-  'function transfer(address to, uint256 value) returns (bool)',
   'function decimals() view returns (uint8)',
+  'function transferAndCall(address to, uint256 value, bytes calldata data) returns (bool)',
 ]);
 
 export const UBISCHEME_ABI = parseAbi([
@@ -62,7 +61,7 @@ export const celoService = {
   async getG$Balance(address: string): Promise<string> {
     if (!address.startsWith('0x')) return '0.00';
     if (!this.hasInjectedProvider()) {
-      return localStorage.getItem(`fable_mock_g$_bal_${address.toLowerCase()}`) || '150.00';
+      return localStorage.getItem(`fable_mock_g$_bal_${address.toLowerCase()}`) || '50000.00';
     }
     try {
       const balance = await publicClient.readContract({ address: G$_ADDRESS, abi: G$_ABI, functionName: 'balanceOf', args: [address as `0x${string}`] });
@@ -112,55 +111,44 @@ export const celoService = {
     }
   },
 
-  // Transfer G$ to game treasury and return the tx hash (needed for NFT mint verification)
-  async transferG$(sender: string, recipient: string, amount: string): Promise<{ success: boolean; txHash: string }> {
-    const amountBig = BigInt(Math.floor(Number(amount) * 1e18));
+  // Buy a Fable item: transfers G$ and mints the NFT in one transaction via transferAndCall.
+  // User calls: gToken.transferAndCall(fableItemsAddress, price, abi.encode(tokenId))
+  async buyItem(walletAddress: string, itemId: string, tokenId: number, gdCost: number): Promise<NftItem | null> {
+    const amountWei = parseUnits(String(gdCost), 18);
+    const data = encodeAbiParameters(parseAbiParameters('uint256'), [BigInt(tokenId)]);
 
     if (!this.hasInjectedProvider()) {
-      const currentBal = Number(await this.getG$Balance(sender));
-      if (currentBal >= Number(amount)) {
-        localStorage.setItem(`fable_mock_g$_bal_${sender.toLowerCase()}`, (currentBal - Number(amount)).toFixed(2));
-        return { success: true, txHash: `mock_tx_${Date.now()}` };
-      }
-      return { success: false, txHash: '' };
+      const currentBal = Number(await this.getG$Balance(walletAddress));
+      if (currentBal < gdCost) return null;
+      localStorage.setItem(`fable_mock_g$_bal_${walletAddress.toLowerCase()}`, (currentBal - gdCost).toFixed(2));
+      return {
+        itemId,
+        tokenId,
+        txHash: `mock_buy_${tokenId}_${Date.now()}`,
+        mintedAt: new Date().toISOString(),
+      };
     }
 
     try {
       const walletClient = createWalletClient({ chain: celo, transport: custom((window as any).ethereum) });
       const { request } = await publicClient.simulateContract({
-        account: sender as `0x${string}`, address: G$_ADDRESS, abi: G$_ABI,
-        functionName: 'transfer', args: [recipient as `0x${string}`, amountBig],
+        account: walletAddress as `0x${string}`,
+        address: G$_ADDRESS,
+        abi: G$_ABI,
+        functionName: 'transferAndCall',
+        args: [FABLE_ITEMS_ADDRESS, amountWei, data],
       });
       const hash = await walletClient.writeContract(request);
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      return { success: receipt.status === 'success', txHash: hash };
-    } catch (err) {
-      console.error('G$ Transfer failed:', err);
-      return { success: false, txHash: '' };
-    }
-  },
-
-  // Call the mint-item API route to mint an NFT after G$ payment
-  async mintNFTViaAPI(walletAddress: string, itemId: string, paymentTxHash: string, gdCost: number): Promise<NftItem | null> {
-    try {
-      const res = await fetch('/api/mint-item', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ walletAddress, itemId, paymentTxHash, gdCost }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        console.error('[mintNFTViaAPI] Failed:', data.error);
-        return null;
-      }
+      if (receipt.status !== 'success') return null;
       return {
         itemId,
-        tokenId: data.tokenId,
-        txHash: data.txHash,
+        tokenId,
+        txHash: hash,
         mintedAt: new Date().toISOString(),
       };
     } catch (err) {
-      console.error('[mintNFTViaAPI]', err);
+      console.error('buyItem failed:', err);
       return null;
     }
   },

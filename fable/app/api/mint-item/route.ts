@@ -3,7 +3,7 @@ import { createPublicClient, createWalletClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { celo, celoAlfajores } from 'viem/chains';
 import { FABLE_ITEMS_ADDRESS, FABLE_ITEMS_ABI, ITEM_TOKEN_IDS } from '../../../lib/nft';
-import { G$_ADDRESS, GAME_TREASURY_ADDRESS } from '../../../lib/celo';
+import { G$_ADDRESS } from '../../../lib/celo';
 import { parseAbi } from 'viem';
 
 const IS_TESTNET = process.env.NEXT_PUBLIC_USE_TESTNET === 'true';
@@ -37,7 +37,7 @@ async function verifyPayment(txHash: `0x${string}`, expectedFrom: string, expect
       const val  = Number((log.args as any).value ?? BigInt(0)) / 1e18;
       return (
         from === expectedFrom.toLowerCase() &&
-        to   === GAME_TREASURY_ADDRESS.toLowerCase() &&
+        to   === '0x91487d8bc1b573f0bc6c23de7ba23d50f49f627b' &&
         val  >= expectedAmount * 0.99 // 1% tolerance for rounding
       );
     });

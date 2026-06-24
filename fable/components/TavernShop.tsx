@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Image from 'next/image';
-import { celoService, GAME_TREASURY_ADDRESS } from '../lib/celo';
+import { celoService } from '../lib/celo';
 import { dbService } from '../lib/supabaseClient';
 import { GD_ITEMS, GOLD_ITEMS, GDollarItemDef, GoldItemDef } from '../lib/nft';
 import gameBridge from '../game/systems/GameBridge';
@@ -147,7 +147,7 @@ export default function TavernShop({
 
     setBuying(true);
     try {
-      // 1. Ensure wallet connected
+      // Ensure wallet connected
       let addr = walletAddrRef.current;
       if (!addr) {
         await connectWallet();
@@ -155,17 +155,13 @@ export default function TavernShop({
       }
       if (!addr) { showMessage('Connect your wallet to purchase with G$.'); return; }
 
-      // 2. Transfer G$ on-chain (user signs this tx)
-      const { success, txHash } = await celoService.transferG$(addr, GAME_TREASURY_ADDRESS, String(item.gdCost));
-      if (!success) { showMessage('G$ transfer failed. Check your balance.'); return; }
+      // Single tx: transferAndCall sends G$ and mints NFT atomically
+      showMessage(`Sending ${item.gdCost} G$ and minting ${item.name}…`);
+      const nftItem = await celoService.buyItem(addr, item.id, item.tokenId, item.gdCost);
+      if (!nftItem) { showMessage('Purchase failed. Check your G$ balance.'); return; }
 
       await refreshBalance();
 
-      // 3. Mint NFT via server API (server wallet signs mint tx)
-      showMessage(`Minting ${item.name} NFT to your wallet…`);
-      const nftItem = await celoService.mintNFTViaAPI(addr, item.id, txHash, item.gdCost);
-
-      // 4. Update player data + record NFT
       setPlayerData((prev: any) => {
         let updated = { ...prev };
         if (item.category === 'weapon') {
@@ -177,19 +173,17 @@ export default function TavernShop({
           if (!abilities.includes(item.id)) abilities.push(item.id);
           updated = { ...updated, abilities };
         }
-        if (nftItem) {
-          const nftItems = [...(prev.nftItems || [])];
-          if (!nftItems.some(n => n.itemId === item.id)) nftItems.push(nftItem);
-          updated = { ...updated, nftItems };
-        }
+        const nftItems = [...(prev.nftItems || [])];
+        if (!nftItems.some(n => n.itemId === item.id)) nftItems.push(nftItem);
+        updated = { ...updated, nftItems };
         dbService.savePlayer(updated);
         return updated;
       });
 
-      const nftMsg = nftItem?.txHash.startsWith('mock_')
-        ? `(NFT recorded — awaiting contract deployment)`
-        : `NFT minted! Tx: ${nftItem?.txHash.slice(0, 10)}…`;
-      showMessage(`${item.icon} ${item.name} purchased! ${nftMsg}`);
+      const txMsg = nftItem.txHash.startsWith('mock_')
+        ? `(mock mode)`
+        : `Tx: ${nftItem.txHash.slice(0, 10)}…`;
+      showMessage(`${item.icon} ${item.name} minted! ${txMsg}`);
     } catch (err) {
       console.error('G$ purchase failed:', err);
       showMessage('Purchase failed. Please try again.');

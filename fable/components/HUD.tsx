@@ -253,17 +253,13 @@ export default function HUD({
     setClaimingUBI(true);
     try {
       if (!walletAddress) { await connectWallet(); }
-      // Micro self-transfer of 0 G$ with data embedded in memo (or just use the tx as a timestamp proof)
-      // Since viem ERC-20 doesn't support memos, we do a 0.001 G$ transfer to treasury as the commit record
-      const { success, txHash } = await celoService.transferG$(walletAddress, walletAddress, '0');
-      if (success || txHash) {
-        await dbService.recordProgressSync(walletAddress, playerData.level, playerData.gold, txHash || `local_${Date.now()}`);
-        setPlayerData((prev: any) => ({
-          ...prev,
-          lastProgressSync: { level: prev.level, gold: prev.gold, txHash: txHash || `local_${Date.now()}`, syncedAt: new Date().toISOString() },
-        }));
-        showFlashMessage(`Progress committed on-chain! Lv ${playerData.level} · ${playerData.gold}G recorded.`);
-      }
+      const localRef = `local_${Date.now()}`;
+      await dbService.recordProgressSync(walletAddress, playerData.level, playerData.gold, localRef);
+      setPlayerData((prev: any) => ({
+        ...prev,
+        lastProgressSync: { level: prev.level, gold: prev.gold, txHash: localRef, syncedAt: new Date().toISOString() },
+      }));
+      showFlashMessage(`Progress saved! Lv ${playerData.level} · ${playerData.gold}G recorded.`);
     } catch (e) {
       console.error(e);
       showFlashMessage('Commit failed. Check wallet connection.');
