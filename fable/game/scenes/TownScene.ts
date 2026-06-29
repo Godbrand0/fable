@@ -93,7 +93,6 @@ export default class TownScene extends Phaser.Scene {
 
     gameBridge.on('end_guide_talk', () => {
       this.inDialogue = false;
-      this.guideEntered = false;
       this.cameras.main.startFollow(this.player, true, 1, 1);
     });
 
