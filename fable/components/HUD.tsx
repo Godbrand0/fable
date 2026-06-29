@@ -193,29 +193,28 @@ export default function HUD({
     setTimeout(() => setMessage(null), 4000);
   };
 
-  // Stat point allocation
+  // Stat upgrade system — gold cost, zone-gated cap
+  const totalStatsInvested = (playerData.stats.strength || 0) + (playerData.stats.agility || 0)
+    + (playerData.stats.defense || 0) + (playerData.stats.vitality || 0);
+  const statCap = (playerData.maxUnlockedZone || 1) * 5;
+  const statCost = totalStatsInvested < 5 ? 5 : 10;
+
   const allocateStat = (statName: 'strength' | 'agility' | 'defense' | 'vitality') => {
-    if ((playerData.statPoints || 0) <= 0) return;
+    if (totalStatsInvested >= statCap) return;
+    if ((playerData.gold || 0) < statCost) return;
 
     setPlayerData((prev: any) => {
       const stats = { ...prev.stats };
       stats[statName] = (stats[statName] || 0) + 1;
-      
+
       let maxHp = prev.maxHp;
       let hp = prev.hp;
       if (statName === 'vitality') {
-        maxHp += 15; // +15 Max HP per Vitality point
-        hp += 15;
+        maxHp += 10;
+        hp = Math.min(prev.hp + 10, maxHp);
       }
 
-      const updated = {
-        ...prev,
-        stats,
-        maxHp,
-        hp,
-        statPoints: prev.statPoints - 1
-      };
-      
+      const updated = { ...prev, stats, maxHp, hp, gold: prev.gold - statCost };
       dbService.savePlayer(updated);
       return updated;
     });
@@ -566,32 +565,48 @@ export default function HUD({
               {/* STATS */}
               {activeTab === 'stats' && (
                 <div className="flex flex-col gap-3">
-                  <div className="flex justify-between items-center bg-purple-950/40 border border-purple-900/60 p-2 rounded text-purple-300 font-bold">
-                    <span>Available Stat Points</span>
-                    <span>{playerData.statPoints || 0}</span>
+                  <div className="flex justify-between items-center bg-purple-950/40 border border-purple-900/60 p-2 rounded text-purple-300 font-bold text-[11px]">
+                    <span>Points invested</span>
+                    <span>{totalStatsInvested} / {statCap}</span>
                   </div>
 
-                  <div className="flex flex-col gap-2 mt-1">
+                  {totalStatsInvested < statCap ? (
+                    <div className="text-[10px] text-yellow-400 text-center">
+                      Each point costs <span className="font-bold">{statCost} 🪙</span> &nbsp;·&nbsp; You have <span className="font-bold">{playerData.gold || 0} 🪙</span>
+                    </div>
+                  ) : (
+                    <div className="text-[10px] text-zinc-500 text-center italic">
+                      {playerData.maxUnlockedZone >= 3 ? 'Max stats reached' : 'Clear next zone to unlock 5 more points'}
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-2">
                     {[
-                      { key: 'strength', name: '🔴 Strength (Damage)', val: playerData.stats.strength },
-                      { key: 'agility', name: '🟢 Agility (Crit chance)', val: playerData.stats.agility },
-                      { key: 'defense', name: '🔵 Defense (Damage Reduction)', val: playerData.stats.defense },
-                      { key: 'vitality', name: '🟡 Vitality (Max HP +15)', val: playerData.stats.vitality }
-                    ].map(st => (
-                      <div key={st.key} className="flex justify-between items-center bg-zinc-900/60 p-2 rounded border border-zinc-800">
-                        <span className="text-[11px] font-semibold text-zinc-300">{st.name}</span>
-                        <div className="flex items-center gap-3">
-                          <span className="font-bold">{st.val}</span>
-                          <button
-                            onClick={() => allocateStat(st.key as any)}
-                            disabled={(playerData.statPoints || 0) <= 0}
-                            className="w-6 h-6 flex justify-center items-center bg-purple-600 hover:bg-purple-500 disabled:opacity-30 rounded text-white font-bold"
-                          >
-                            +
-                          </button>
+                      { key: 'strength', name: '🔴 Strength', desc: '+2 DMG per point', val: playerData.stats.strength },
+                      { key: 'agility',  name: '🟢 Agility',  desc: '-30ms fire rate per point', val: playerData.stats.agility },
+                      { key: 'defense',  name: '🔵 Defense',  desc: '-3 DMG taken per point', val: playerData.stats.defense },
+                      { key: 'vitality', name: '🟡 Vitality', desc: '+10 Max HP per point', val: playerData.stats.vitality }
+                    ].map(st => {
+                      const canBuy = totalStatsInvested < statCap && (playerData.gold || 0) >= statCost;
+                      return (
+                        <div key={st.key} className="flex justify-between items-center bg-zinc-900/60 p-2 rounded border border-zinc-800">
+                          <div className="flex flex-col">
+                            <span className="text-[11px] font-semibold text-zinc-300">{st.name}</span>
+                            <span className="text-[9px] text-zinc-500">{st.desc}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="font-bold text-sm">{st.val}</span>
+                            <button
+                              onClick={() => allocateStat(st.key as any)}
+                              disabled={!canBuy}
+                              className="w-6 h-6 flex justify-center items-center bg-purple-600 hover:bg-purple-500 disabled:opacity-30 rounded text-white font-bold text-sm"
+                            >
+                              +
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}

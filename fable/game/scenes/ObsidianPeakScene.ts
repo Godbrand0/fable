@@ -17,7 +17,7 @@ export default class ObsidianPeakScene extends CombatScene {
     name: 'Obsidian Golem',
     hp: 250,
     speed: 30,
-    damage: 18,
+    damage: 55,
     points: 35,
   };
 
@@ -26,7 +26,7 @@ export default class ObsidianPeakScene extends CombatScene {
     name: 'Fire Demon',
     hp: 5500,
     speed: 25,
-    damage: 45,
+    damage: 80,
     points: 200,
     isBoss: true,
   };

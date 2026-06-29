@@ -16,7 +16,7 @@ export default class AshwaterMarshScene extends CombatScene {
     name: 'Poison Slime',
     hp: 120,
     speed: 40,
-    damage: 12,
+    damage: 35,
     points: 20
   };
 
@@ -25,7 +25,7 @@ export default class AshwaterMarshScene extends CombatScene {
     name: 'Swamp Hydra',
     hp: 3200,
     speed: 0,
-    damage: 30,
+    damage: 55,
     points: 100,
     isBoss: true
   };

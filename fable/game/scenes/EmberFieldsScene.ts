@@ -16,7 +16,7 @@ export default class EmberFieldsScene extends CombatScene {
     name: 'Imp',
     hp: 60,
     speed: 65,
-    damage: 8,
+    damage: 22,
     points: 11,
   };
 
@@ -25,7 +25,7 @@ export default class EmberFieldsScene extends CombatScene {
     name: 'Lava Pumpkin',
     hp: 1800,
     speed: 0,
-    damage: 20,
+    damage: 35,
     points: 50,
     isBoss: true,
   };

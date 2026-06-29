@@ -120,11 +120,8 @@ export default function Home() {
     if (!charName.trim() || !walletAddress) return;
     setCreating(true);
 
-    let stats = { strength: 10, agility: 10, defense: 10, vitality: 10 };
-    let maxHp = 100;
-    if (selectedClass === 'knight')    { stats = { strength: 12, agility: 8,  defense: 12, vitality: 12 }; maxHp = 130; }
-    if (selectedClass === 'ranger')    { stats = { strength: 10, agility: 15, defense: 8,  vitality: 10 }; maxHp = 100; }
-    if (selectedClass === 'berserker') { stats = { strength: 16, agility: 6,  defense: 10, vitality: 14 }; maxHp = 160; }
+    const stats = { strength: 0, agility: 0, defense: 0, vitality: 0 };
+    const maxHp = 100;
 
     const newPlayer = {
       wallet_address:  walletAddress,

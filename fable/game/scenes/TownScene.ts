@@ -3,6 +3,13 @@ import gameBridge from '../systems/GameBridge';
 
 const WORLD_W = 1440;
 const WORLD_H = 1440;
+
+const WEAPON_TEXTURE: Record<string, string> = {
+  bamboo_stick:         'player_bamboo',
+  iron_sword:           'player_iron_sword',
+  ember_blade:          'player_ember_blade',
+  obsidian_greatsword:  'player_obsidian_gs',
+};
 const TILE = 32;
 
 export default class TownScene extends Phaser.Scene {
@@ -40,9 +47,12 @@ export default class TownScene extends Phaser.Scene {
     // World + physics bounds
     this.physics.world.setBounds(0, 0, WORLD_W, WORLD_H);
 
-    // Receive player data for zone unlock level
+    // Receive player data for zone unlock level and weapon texture
     gameBridge.on('sync_player_data', (data: any) => {
-      if (data) this.maxUnlockedZone = data.maxUnlockedZone ?? 1;
+      if (!data) return;
+      this.maxUnlockedZone = data.maxUnlockedZone ?? 1;
+      const textureKey = WEAPON_TEXTURE[data.equippedWeapon ?? 'bamboo_stick'] ?? 'player_bamboo';
+      if (this.player?.active) this.player.setTexture(textureKey);
     });
 
     // Joystick

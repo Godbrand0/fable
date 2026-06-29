@@ -15,6 +15,20 @@ const WORLD_W = 1440;
 const WORLD_H = 1440;
 const TILE = 32;
 
+const WEAPON_ATK: Record<string, number> = {
+  bamboo_stick:         5,
+  iron_sword:          12,
+  ember_blade:         15,
+  obsidian_greatsword: 60,
+};
+
+const WEAPON_TEXTURE: Record<string, string> = {
+  bamboo_stick:         'player_bamboo',
+  iron_sword:           'player_iron_sword',
+  ember_blade:          'player_ember_blade',
+  obsidian_greatsword:  'player_obsidian_gs',
+};
+
 export default abstract class CombatScene extends Phaser.Scene {
   protected player!: Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
   protected enemies!: Phaser.Physics.Arcade.Group;
@@ -29,14 +43,14 @@ export default abstract class CombatScene extends Phaser.Scene {
   protected playerXP = 0;
   protected playerGold = 50;
   protected playerLevel = 1;
-  protected playerDmgMin = 24;
-  protected playerDmgMax = 40;
+  protected playerDmg = 32;
+  private playerDefense = 0;
 
   // Joystick
   private joystickMoveDir = { x: 0, y: 0 };
   private joystickAimDir = { x: 0, y: 0 };
   private lastShootTime = 0;
-  private shootCooldown = 300;
+  private shootCooldown = 600;
 
   // Ability
   private abilityCooldownActive = false;
@@ -100,11 +114,17 @@ export default abstract class CombatScene extends Phaser.Scene {
         this.playerGold = data.gold ?? 50;
         this.playerLevel = data.level ?? 1;
         const str = data.stats?.strength || 0;
-        const weaponAtk = data.weaponAtk ?? 5;
+        const agi = data.stats?.agility || 0;
+        const def = data.stats?.defense || 0;
+        const weaponAtk = WEAPON_ATK[data.equippedWeapon ?? 'bamboo_stick'] ?? 5;
         this.equippedWeaponAtk = weaponAtk;
-        this.playerDmgMin = 24 + Math.floor(str * 2.5) + weaponAtk;
-        this.playerDmgMax = 40 + Math.floor(str * 4) + weaponAtk;
+        this.playerDmg = 32 + (str * 2) + weaponAtk;
+        this.playerDefense = def;
+        this.shootCooldown = Math.max(150, 600 - (agi * 30));
         this.activeAbility = data.activeAbility ?? null;
+        // Apply equipped weapon texture on load
+        const textureKey = WEAPON_TEXTURE[data.equippedWeapon ?? 'bamboo_stick'] ?? 'player_bamboo';
+        if (this.player?.active) this.player.setTexture(textureKey);
       }
     });
 
@@ -544,7 +564,7 @@ export default abstract class CombatScene extends Phaser.Scene {
 
     let hp = enemy.getData('hp');
     const maxHp = enemy.getData('maxHp');
-    let dmg = Phaser.Math.Between(this.playerDmgMin, this.playerDmgMax);
+    let dmg = this.playerDmg;
     if (enemy.texture.key === 'obsidian_golem') dmg = Math.floor(dmg * 0.8);
     hp -= dmg;
     enemy.setData('hp', hp);
@@ -612,7 +632,8 @@ export default abstract class CombatScene extends Phaser.Scene {
       return;
     }
 
-    const dmg = 10;
+    const rawDmg = this.bossSpawned ? this.bossConfig.damage : this.regularEnemyConfig.damage;
+    const dmg = Math.max(1, rawDmg - (this.playerDefense * 3));
     this.playerHP = Math.max(0, this.playerHP - dmg);
 
     this.cameras.main.flash(100, 150, 0, 0);
@@ -629,7 +650,8 @@ export default abstract class CombatScene extends Phaser.Scene {
     const lastDmgTime = enemy.getData('lastMeleeDmg') || 0;
     const now = this.time.now;
     if (now > lastDmgTime + 900) {
-      const dmg = enemy.isBoss ? this.bossConfig.damage : this.regularEnemyConfig.damage;
+      const rawDmg = enemy.isBoss ? this.bossConfig.damage : this.regularEnemyConfig.damage;
+      const dmg = Math.max(1, rawDmg - (this.playerDefense * 3));
       this.playerHP = Math.max(0, this.playerHP - dmg);
       this.cameras.main.flash(100, 150, 0, 0);
       this.showFloatingText(player.x, player.y - 12, `-${dmg}`, '#EF2929');
