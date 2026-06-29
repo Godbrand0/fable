@@ -24,8 +24,11 @@ export default class TownScene extends Phaser.Scene {
   private promptLabel!: Phaser.GameObjects.Text;
   private tavernZone!: Phaser.Geom.Rectangle;
   private bankZone!: Phaser.Geom.Rectangle;
+  private guideZone!: Phaser.Geom.Rectangle;
   private tavernEntered = false;
   private bankEntered = false;
+  private guideEntered = false;
+  private inDialogue = false;
 
   // Player config from React
   private maxUnlockedZone = 1;
@@ -40,6 +43,8 @@ export default class TownScene extends Phaser.Scene {
   init() {
     this.tavernEntered = false;
     this.bankEntered = false;
+    this.guideEntered = false;
+    this.inDialogue = false;
     gameBridge.emit('request_player_data');
   }
 
@@ -72,11 +77,32 @@ export default class TownScene extends Phaser.Scene {
       if (this.player?.active) this.player.setTexture(textureKey);
     });
 
+    gameBridge.on('guide_camera_pan', (data: any) => {
+      // Stop following player to allow pan
+      this.cameras.main.stopFollow();
+      if (data.target === 'gates') {
+        this.cameras.main.pan(WORLD_W / 2, WORLD_H - 220, 1000, 'Power2');
+      } else if (data.target === 'bank') {
+        this.cameras.main.pan(200, 110, 1000, 'Power2');
+      } else if (data.target === 'tavern') {
+        this.cameras.main.pan(720, 110, 1000, 'Power2');
+      } else if (data.target === 'guide') {
+        this.cameras.main.pan(WORLD_W / 2, WORLD_H / 2 - 20, 1000, 'Power2');
+      }
+    });
+
+    gameBridge.on('end_guide_talk', () => {
+      this.inDialogue = false;
+      this.guideEntered = false;
+      this.cameras.main.startFollow(this.player, true, 1, 1);
+    });
+
     this.buildGround();
     this.buildBoundaryWalls();
     this.buildBuildings();
     this.buildDecorations();
     this.buildPortals();
+    this.buildNPCs();
     this.spawnPlayer();
     this.buildUI();
 
@@ -483,6 +509,50 @@ export default class TownScene extends Phaser.Scene {
     });
   }
 
+  // ─── NPCs ───────────────────────────────────────────────────────────────────
+
+  private buildNPCs() {
+    const cx = WORLD_W / 2;
+    const cy = WORLD_H / 2 - 20;
+
+    const g = this.add.graphics().setDepth(4);
+    
+    // Shadow
+    g.fillStyle(0x000000, 0.2);
+    g.fillEllipse(cx, cy + 12, 20, 10);
+
+    // Body (Robes)
+    g.fillStyle(0x2B4C7E);
+    g.fillRect(cx - 10, cy - 10, 20, 22);
+    
+    // Belt
+    g.fillStyle(0x8A6A2A);
+    g.fillRect(cx - 10, cy, 20, 4);
+
+    // Head
+    g.fillStyle(0xFFD3B6);
+    g.fillCircle(cx, cy - 16, 8);
+
+    // White beard
+    g.fillStyle(0xFFFFFF);
+    g.fillTriangle(cx - 6, cy - 10, cx + 6, cy - 10, cx, cy);
+
+    // Guildmaster Thorne Nameplate
+    this.add
+      .text(cx, cy - 34, 'Guildmaster', {
+        fontFamily: 'monospace',
+        fontSize: '8px',
+        color: '#88CCFF',
+        fontStyle: 'bold',
+        stroke: '#000000',
+        strokeThickness: 2,
+      })
+      .setOrigin(0.5)
+      .setDepth(5);
+
+    this.guideZone = new Phaser.Geom.Rectangle(cx - 30, cy - 30, 60, 60);
+  }
+
   // ─── Player ───────────────────────────────────────────────────────────────────
 
   private spawnPlayer() {
@@ -521,6 +591,8 @@ export default class TownScene extends Phaser.Scene {
 
   private movePlayer() {
     this.player.setVelocity(0);
+    if (this.inDialogue) return;
+
     const speed = 120;
     let dx = 0;
     let dy = 0;
@@ -590,9 +662,31 @@ export default class TownScene extends Phaser.Scene {
           gameBridge.emit('enter_bank');
         }
       } else {
-        this.promptLabel.setVisible(false);
-        this.tavernEntered = false;
-        this.bankEntered = false;
+        const nearGuide = this.guideZone && this.isTouchingZone(
+          new Phaser.Geom.Rectangle(
+            this.guideZone.x - 20,
+            this.guideZone.y - 20,
+            this.guideZone.width + 40,
+            this.guideZone.height + 40
+          )
+        );
+        if (nearGuide) {
+          this.promptLabel
+            .setText('⬆  Talk to Guildmaster')
+            .setPosition(labelX, labelY)
+            .setVisible(true);
+          if (!this.guideEntered && this.isTouchingZone(this.guideZone)) {
+            this.guideEntered = true;
+            this.inDialogue = true;
+            this.player.setVelocity(0); // stop immediately
+            gameBridge.emit('talk_to_guide');
+          }
+        } else {
+          this.promptLabel.setVisible(false);
+          this.tavernEntered = false;
+          this.bankEntered = false;
+          this.guideEntered = false;
+        }
       }
     }
   }

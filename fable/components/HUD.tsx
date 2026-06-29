@@ -12,6 +12,7 @@ import {
 import TavernShop, { TAVERN_WEAPONS } from './TavernShop';
 import LevelClearScreen from './LevelClearScreen';
 import BankModal from './BankModal';
+import DialogueModal from './DialogueModal';
 import { GD_ITEMS } from '../lib/nft';
 
 interface HUDProps {
@@ -41,6 +42,7 @@ export default function HUD({
   const [cooldownRemaining, setCooldownRemaining] = useState(0); // seconds
   const [inTavern, setInTavern] = useState(false);
   const [inBank, setInBank] = useState(false);
+  const [inDialogue, setInDialogue] = useState(false);
   const [inLevelClear, setInLevelClear] = useState(false);
   const [levelClearZone, setLevelClearZone] = useState<string>('');
   const [message, setMessage] = useState<string | null>(null);
@@ -65,6 +67,14 @@ export default function HUD({
     // 2.5 Bank Entry
     const unsubBank = gameBridge.on('enter_bank', () => {
       setInBank(true);
+    });
+
+    // 2.7 Guide Talk
+    const unsubGuide = gameBridge.on('talk_to_guide', () => {
+      setInDialogue(true);
+    });
+    const unsubGuideEnd = gameBridge.on('end_guide_talk', () => {
+      setInDialogue(false);
     });
 
     // 3. Health Sync
@@ -178,6 +188,8 @@ export default function HUD({
       unsubScene();
       unsubTavern();
       unsubBank();
+      unsubGuide();
+      unsubGuideEnd();
       unsubHP();
       unsubGold();
       unsubXP();
@@ -344,6 +356,11 @@ export default function HUD({
           refreshBalance={refreshBalance}
           showMessage={showFlashMessage}
         />
+      )}
+
+      {/* Dialogue Modal */}
+      {inDialogue && (
+        <DialogueModal playerName={playerData?.name} />
       )}
 
 
