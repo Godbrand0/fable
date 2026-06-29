@@ -9,9 +9,13 @@ import gameBridge from '../game/systems/GameBridge';
 import { X, Gem } from 'lucide-react';
 
 // Re-export weapon list for HUD loadout panel
-export const TAVERN_WEAPONS = GD_ITEMS.filter(i => i.category === 'weapon').map(i => ({
-  id: i.id, name: i.name, attack: i.attack ?? 0,
-}));
+export const TAVERN_WEAPONS = [
+  { id: 'bamboo_stick', name: 'Bamboo Stick', attack: 5, textureKey: 'player_bamboo' },
+  ...GD_ITEMS.filter(i => i.category === 'weapon').map(i => ({
+    id: i.id, name: i.name, attack: i.attack ?? 0,
+    textureKey: i.id === 'iron_sword' ? 'player_iron_sword' : i.id === 'ember_blade' ? 'player_ember_blade' : 'player_obsidian_gs'
+  }))
+];
 
 type ShopTab = 'gold' | 'gd';
 

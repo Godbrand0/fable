@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import TavernShop, { TAVERN_WEAPONS } from './TavernShop';
 import LevelClearScreen from './LevelClearScreen';
+import BankModal from './BankModal';
 import { GD_ITEMS } from '../lib/nft';
 
 interface HUDProps {
@@ -39,6 +40,7 @@ export default function HUD({
   const [abilityCooldown, setAbilityCooldown] = useState(0); // 0 to 100 percentage
   const [cooldownRemaining, setCooldownRemaining] = useState(0); // seconds
   const [inTavern, setInTavern] = useState(false);
+  const [inBank, setInBank] = useState(false);
   const [inLevelClear, setInLevelClear] = useState(false);
   const [levelClearZone, setLevelClearZone] = useState<string>('');
   const [message, setMessage] = useState<string | null>(null);
@@ -58,6 +60,11 @@ export default function HUD({
     // 2. Tavern Entry
     const unsubTavern = gameBridge.on('enter_tavern', () => {
       setInTavern(true);
+    });
+    
+    // 2.5 Bank Entry
+    const unsubBank = gameBridge.on('enter_bank', () => {
+      setInBank(true);
     });
 
     // 3. Health Sync
@@ -170,6 +177,7 @@ export default function HUD({
       clearTimeout(t2);
       unsubScene();
       unsubTavern();
+      unsubBank();
       unsubHP();
       unsubGold();
       unsubXP();
@@ -288,11 +296,25 @@ export default function HUD({
     setPlayerData((prev: any) => {
       const updated = { ...prev, equippedWeapon: weaponId };
       dbService.savePlayer(updated);
+      
+      const wDef = TAVERN_WEAPONS.find(w => w.id === weaponId);
+      if (wDef?.textureKey) {
+        gameBridge.emit('weapon_changed', { textureKey: wDef.textureKey });
+      }
+
       return updated;
     });
   };
 
-  const currentWeaponObj = TAVERN_WEAPONS.find(w => w.id === playerData.equippedWeapon) ?? { name: 'Bamboo Stick', attack: 5 };
+  const equipAbility = (abilityId: string) => {
+    setPlayerData((prev: any) => {
+      const updated = { ...prev, activeAbility: abilityId };
+      dbService.savePlayer(updated);
+      return updated;
+    });
+  };
+
+  const currentWeaponObj = TAVERN_WEAPONS.find(w => w.id === playerData.equippedWeapon) ?? TAVERN_WEAPONS[0];
 
   return (
     <div className="absolute inset-0 flex flex-col pointer-events-none select-none justify-between font-mono">
@@ -307,6 +329,20 @@ export default function HUD({
           gDollarBalance={gDollarBalance}
           refreshBalance={refreshBalance}
           onLeave={() => setInTavern(false)}
+          showMessage={showFlashMessage}
+        />
+      )}
+
+      {/* Bank Modal overlay */}
+      {inBank && (
+        <BankModal
+          playerData={playerData}
+          setPlayerData={setPlayerData}
+          walletAddress={walletAddress}
+          walletConnected={walletConnected}
+          connectWallet={connectWallet}
+          onClose={() => setInBank(false)}
+          refreshBalance={refreshBalance}
           showMessage={showFlashMessage}
         />
       )}
@@ -369,6 +405,13 @@ export default function HUD({
             <div className="flex items-center gap-1 bg-gradient-to-r from-yellow-600/80 to-amber-600/80 border border-yellow-500/30 px-2 py-0.5 rounded text-[9px] text-yellow-100 font-bold animate-pulse">
               <Flame size={10} />
               <span>+50% XP/Gold Buff</span>
+            </div>
+          )}
+          
+          {playerData.pendingRewards && playerData.pendingRewards.length > 0 && (
+            <div className="flex items-center gap-1 bg-gradient-to-r from-green-600/80 to-emerald-600/80 border border-green-500/30 px-2 py-0.5 rounded text-[9px] text-green-100 font-bold animate-pulse">
+              <Award size={10} />
+              <span>{playerData.pendingRewards.length} Reward{playerData.pendingRewards.length > 1 ? 's' : ''} Pending! Visit Bank</span>
             </div>
           )}
         </div>
@@ -493,6 +536,7 @@ export default function HUD({
                       <span className="text-[10px] text-zinc-400 font-semibold tracking-wider">Special Abilities</span>
                       {playerData.abilities.map((abilityId: string) => {
                         const def = GD_ITEMS.find(i => i.id === abilityId);
+                        const isEquipped = playerData.activeAbility === abilityId;
                         const isNFT = playerData.nftItems?.some((n: any) => n.itemId === abilityId);
                         return (
                           <div key={abilityId} className="flex justify-between items-center bg-black/40 p-2 rounded border border-zinc-800/80">
@@ -501,7 +545,16 @@ export default function HUD({
                               <span>{def?.name ?? abilityId}</span>
                               {isNFT && <Gem size={9} className="text-purple-400" />}
                             </span>
-                            <span className="text-[9px] text-purple-300 bg-purple-950/40 border border-purple-800/40 px-2 py-0.5 rounded">{def?.effect}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[9px] text-purple-300 bg-purple-950/40 border border-purple-800/40 px-2 py-0.5 rounded">{def?.effect}</span>
+                              {isEquipped ? (
+                                <span className="text-[9px] bg-yellow-950 text-yellow-400 border border-yellow-800/80 px-2 py-0.5 rounded font-bold">EQUIPPED</span>
+                              ) : (
+                                <button onClick={() => equipAbility(abilityId)} className="bg-purple-600 hover:bg-purple-500 text-white text-[9px] px-2 py-0.5 rounded font-bold">
+                                  EQUIP
+                                </button>
+                              )}
+                            </div>
                           </div>
                         );
                       })}

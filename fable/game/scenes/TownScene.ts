@@ -18,6 +18,7 @@ export default class TownScene extends Phaser.Scene {
   private tavernZone!: Phaser.Geom.Rectangle;
   private bankZone!: Phaser.Geom.Rectangle;
   private tavernEntered = false;
+  private bankEntered = false;
 
   // Player config from React
   private maxUnlockedZone = 1;
@@ -31,6 +32,7 @@ export default class TownScene extends Phaser.Scene {
 
   init() {
     this.tavernEntered = false;
+    this.bankEntered = false;
     gameBridge.emit('request_player_data');
   }
 
@@ -54,6 +56,10 @@ export default class TownScene extends Phaser.Scene {
 
     gameBridge.on('request_scene_info', () => {
       gameBridge.emit('scene_changed', { scene: 'TownScene', title: 'Town Hub' });
+    });
+
+    gameBridge.on('weapon_changed', ({ textureKey }: any) => {
+      if (this.player?.active) this.player.setTexture(textureKey);
     });
 
     this.buildGround();
@@ -154,8 +160,8 @@ export default class TownScene extends Phaser.Scene {
     this.drawBank(200, 110);
     this.bankZone = new Phaser.Geom.Rectangle(168, 185, 64, 30);
 
-    // ── Farmland ──────────────────────────────────────────
-    this.drawFarmland(1160, 200);
+    // ── Marketplace (Coming Soon) ─────────────────────────
+    this.drawMarketplace(1160, 200);
   }
 
   private drawTavern(cx: number, cy: number) {
@@ -281,53 +287,52 @@ export default class TownScene extends Phaser.Scene {
       .setDepth(4);
   }
 
-  private drawFarmland(cx: number, cy: number) {
+  private drawMarketplace(cx: number, cy: number) {
     const g = this.add.graphics().setDepth(3);
 
-    // Dirt patch
-    g.fillStyle(0x7A5A30);
-    g.fillRect(cx - 100, cy - 60, 200, 140);
+    // Stone base building
+    g.fillStyle(0x6A5A4A);
+    g.fillRect(cx - 70, cy - 40, 140, 80);
+    g.fillStyle(0x4A3A2A);
+    g.fillRect(cx - 66, cy - 36, 132, 76);
 
-    // Crop rows
-    g.fillStyle(0x4A8A28);
-    for (let row = 0; row < 4; row++) {
-      for (let col = 0; col < 6; col++) {
-        g.fillRect(cx - 90 + col * 32, cy - 50 + row * 32, 14, 22);
-      }
-    }
-    // Crop highlights
-    g.fillStyle(0x6AB040);
-    for (let row = 0; row < 4; row++) {
-      for (let col = 0; col < 6; col++) {
-        g.fillRect(cx - 88 + col * 32, cy - 50 + row * 32, 4, 18);
-      }
-    }
+    // Open-front stall archways
+    g.fillStyle(0x2A1A0A);
+    g.fillRoundedRect(cx - 50, cy, 30, 40, 15);
+    g.fillRoundedRect(cx - 15, cy, 30, 40, 15);
+    g.fillRoundedRect(cx + 20, cy, 30, 40, 15);
 
-    // Fence posts and rails
-    g.fillStyle(0x8B5C20);
-    const fenceOffsets = [-100, -68, -36, -4, 28, 60, 92];
-    fenceOffsets.forEach((ox) => {
-      g.fillRect(cx + ox, cy - 64, 5, 18);
-      g.fillRect(cx + ox, cy + 76, 5, 18);
-    });
-    const fenceVerts = [-64, 64];
-    fenceVerts.forEach((oy) => {
-      g.fillRect(cx + oy, cy - 64, 5, 150);
-    });
-    // Rails
-    g.fillStyle(0xAA7830);
-    g.fillRect(cx - 100, cy - 56, 200, 4);
-    g.fillRect(cx - 100, cy - 44, 200, 4);
-    g.fillRect(cx - 100, cy + 78, 200, 4);
-    g.fillRect(cx - 100, cy + 90, 200, 4);
+    // MARKET sign
+    this.add
+      .text(cx, cy - 45, 'MARKET', {
+        fontFamily: 'monospace',
+        fontSize: '11px',
+        color: '#FFCC44',
+        fontStyle: 'bold',
+        stroke: '#2A1A00',
+        strokeThickness: 3,
+      })
+      .setOrigin(0.5)
+      .setDepth(4);
 
-    // Chickens (simple rect sprites as placeholders, animated in update)
-    for (let i = 0; i < 3; i++) {
-      const cx2 = cx + Phaser.Math.Between(-80, 80);
-      const cy2 = cy + Phaser.Math.Between(-40, 80);
-      const sprite = this.add.rectangle(cx2, cy2, 10, 8, 0xEEEEEE).setDepth(4);
-      this.chickens.push({ sprite, dx: Phaser.Math.Between(-1, 1) || 1, dy: 0, timer: 0 });
-    }
+    // Flag pole
+    g.fillStyle(0x3A2A1A);
+    g.fillRect(cx + 80, cy - 60, 4, 100);
+
+    // COMING SOON banner
+    g.fillStyle(0xFF6644);
+    g.fillRect(cx + 84, cy - 50, 40, 24);
+
+    this.add
+      .text(cx + 104, cy - 38, 'COMING\nSOON', {
+        fontFamily: 'monospace',
+        fontSize: '8px',
+        color: '#FFFFFF',
+        fontStyle: 'bold',
+        align: 'center',
+      })
+      .setOrigin(0.5)
+      .setDepth(4);
   }
 
   // ─── Decorations ─────────────────────────────────────────────────────────────
@@ -570,9 +575,14 @@ export default class TownScene extends Phaser.Scene {
           .setText('⬆  Enter BANK')
           .setPosition(labelX, labelY)
           .setVisible(true);
+        if (!this.bankEntered && this.isTouchingZone(this.bankZone)) {
+          this.bankEntered = true;
+          gameBridge.emit('enter_bank');
+        }
       } else {
         this.promptLabel.setVisible(false);
         this.tavernEntered = false;
+        this.bankEntered = false;
       }
     }
   }

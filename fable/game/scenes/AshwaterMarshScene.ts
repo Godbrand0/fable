@@ -14,7 +14,7 @@ export default class AshwaterMarshScene extends CombatScene {
   protected regularEnemyConfig: EnemyConfig = {
     key: 'poison_slime',
     name: 'Poison Slime',
-    hp: 30,
+    hp: 120,
     speed: 40,
     damage: 12,
     points: 20
@@ -23,7 +23,7 @@ export default class AshwaterMarshScene extends CombatScene {
   protected bossConfig: EnemyConfig = {
     key: 'swamp_hydra',
     name: 'Swamp Hydra',
-    hp: 1800,
+    hp: 3200,
     speed: 0,
     damage: 30,
     points: 100,

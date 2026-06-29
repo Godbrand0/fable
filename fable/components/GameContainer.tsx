@@ -16,6 +16,7 @@ interface GameContainerProps {
 
 export default function GameContainer({ playerData }: GameContainerProps) {
   const gameRef = useRef<Phaser.Game | null>(null);
+  const playerDataRef = useRef(playerData);
   const [isPortrait, setIsPortrait] = useState(false);
 
   // Detect orientation on mount and on change
@@ -40,9 +41,10 @@ export default function GameContainer({ playerData }: GameContainerProps) {
     const game = new Phaser.Game(configWithScenes);
     gameRef.current = game;
 
-    // 2. Setup initial listener to push character data to scenes when requested
+    // 2. Setup initial listener to push character data to scenes when requested.
+    // Uses a ref so the handler always reads the latest playerData, not the mount-time snapshot.
     const unsubReq = gameBridge.on('request_player_data', () => {
-      gameBridge.emit('sync_player_data', playerData);
+      gameBridge.emit('sync_player_data', playerDataRef.current);
     });
 
     return () => {
@@ -57,9 +59,10 @@ export default function GameContainer({ playerData }: GameContainerProps) {
     };
   }, []);
 
-  // Update scenes whenever playerData changes
+  // Keep ref current and push updates to the active Phaser scene
   useEffect(() => {
     if (playerData) {
+      playerDataRef.current = playerData;
       gameBridge.emit('sync_player_data', playerData);
     }
   }, [playerData]);

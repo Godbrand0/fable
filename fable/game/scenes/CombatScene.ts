@@ -40,6 +40,10 @@ export default abstract class CombatScene extends Phaser.Scene {
 
   // Ability
   private abilityCooldownActive = false;
+  private activeAbility: string | null = null;
+  private shieldActive = false;
+  private shieldCircle: Phaser.GameObjects.Arc | null = null;
+  protected equippedWeaponAtk = 5;
 
   // Keyboard
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -96,8 +100,11 @@ export default abstract class CombatScene extends Phaser.Scene {
         this.playerGold = data.gold ?? 50;
         this.playerLevel = data.level ?? 1;
         const str = data.stats?.strength || 0;
-        this.playerDmgMin = 24 + Math.floor(str * 2.5);
-        this.playerDmgMax = 40 + Math.floor(str * 4);
+        const weaponAtk = data.weaponAtk ?? 5;
+        this.equippedWeaponAtk = weaponAtk;
+        this.playerDmgMin = 24 + Math.floor(str * 2.5) + weaponAtk;
+        this.playerDmgMax = 40 + Math.floor(str * 4) + weaponAtk;
+        this.activeAbility = data.activeAbility ?? null;
       }
     });
 
@@ -155,7 +162,10 @@ export default abstract class CombatScene extends Phaser.Scene {
       this.cameras.main.fadeOut(400, 0, 0, 0);
       this.time.delayedCall(400, () => { this.scene.start(target); });
     });
-    this.events.on('destroy', () => { unsubL(); unsubR(); unsubA(); unsubE(); unsubSI(); unsubNext(); });
+    const unsubW = gameBridge.on('weapon_changed', ({ textureKey }: any) => {
+      this.player.setTexture(textureKey);
+    });
+    this.events.on('destroy', () => { unsubL(); unsubR(); unsubA(); unsubE(); unsubSI(); unsubNext(); unsubW(); });
 
     // Player HP label (world-space, updated per frame)
     this.playerHPLabel = this.add
@@ -251,6 +261,10 @@ export default abstract class CombatScene extends Phaser.Scene {
       else this.runRegularEnemyAI(enemy, time);
     });
 
+    if (this.shieldCircle) {
+      this.shieldCircle.setPosition(this.player.x, this.player.y);
+    }
+
     // ── Boss HP bar ───────────────────────────────────────────────────────────
     if (this.bossSpawned && this.bossInstance?.active) {
       this.drawBossHpBar();
@@ -289,21 +303,72 @@ export default abstract class CombatScene extends Phaser.Scene {
 
   private triggerActiveAbility() {
     if (this.abilityCooldownActive || this.playerHP <= 0) return;
-    this.abilityCooldownActive = true;
 
+    switch (this.activeAbility) {
+      case 'fire_nova':    this.useFireNova();    break;
+      case 'poison_cloak': this.usePoisonCloak(); break;
+      case 'stone_shield': this.useStoneShield(); break;
+      default: return; // no ability equipped
+    }
+  }
+
+  private useFireNova() {
+    this.abilityCooldownActive = true;
     for (let i = 0; i < 8; i++) {
       const angle = (i / 8) * Math.PI * 2;
-      const proj = this.playerProjectiles.create(this.player.x, this.player.y, 'projectile');
+      const proj = this.playerProjectiles.create(this.player.x, this.player.y, 'projectile_nova');
       proj.setVelocity(Math.cos(angle) * 280, Math.sin(angle) * 280);
       proj.setDepth(8);
       this.time.delayedCall(1200, () => { if (proj?.active) proj.destroy(); });
     }
 
-    const ring = this.add.circle(this.player.x, this.player.y, 10, 0x4488FF, 0.4).setDepth(9);
-    this.tweens.add({ targets: ring, scaleX: 8, scaleY: 8, alpha: 0, duration: 500, onComplete: () => ring.destroy() });
+    const ring = this.add.circle(this.player.x, this.player.y, 10, 0xFF6600, 0.5).setDepth(9);
+    this.tweens.add({ targets: ring, scaleX: 12, scaleY: 12, alpha: 0, duration: 500, onComplete: () => ring.destroy() });
 
     gameBridge.emit('ability_cooldown_started', { duration: 4000 });
     this.time.delayedCall(4000, () => { this.abilityCooldownActive = false; });
+  }
+
+  private usePoisonCloak() {
+    this.abilityCooldownActive = true;
+    const ring = this.add.circle(this.player.x, this.player.y, 10, 0x44AA44, 0.45).setDepth(9);
+    this.tweens.add({ targets: ring, scaleX: 12, scaleY: 12, alpha: 0, duration: 800, onComplete: () => ring.destroy() });
+
+    const enemies = this.enemies.getChildren();
+    enemies.forEach((enemy: any) => {
+      if (enemy.active && Phaser.Math.Distance.Between(this.player.x, this.player.y, enemy.x, enemy.y) <= 100) {
+        if (!enemy.getData('baseSpeed')) {
+          enemy.setData('baseSpeed', enemy.isBoss ? this.bossConfig.speed : this.regularEnemyConfig.speed);
+        }
+        enemy.setData('isSlowed', true);
+        enemy.setTint(0x9933CC);
+        this.time.delayedCall(200, () => { if (enemy.active) enemy.clearTint(); });
+      }
+    });
+
+    this.time.delayedCall(8000, () => {
+      this.enemies.getChildren().forEach((enemy: any) => {
+        if (enemy.active) enemy.setData('isSlowed', false);
+      });
+    });
+
+    gameBridge.emit('ability_cooldown_started', { duration: 10000 });
+    this.time.delayedCall(10000, () => { this.abilityCooldownActive = false; });
+  }
+
+  private useStoneShield() {
+    this.abilityCooldownActive = true;
+    this.shieldActive = true;
+    this.shieldCircle = this.add.circle(this.player.x, this.player.y, 20, 0x6B3A1F, 0.55).setDepth(5);
+
+    this.time.delayedCall(5000, () => {
+      this.shieldActive = false;
+      this.shieldCircle?.destroy();
+      this.shieldCircle = null;
+    });
+
+    gameBridge.emit('ability_cooldown_started', { duration: 15000 });
+    this.time.delayedCall(15000, () => { this.abilityCooldownActive = false; });
   }
 
   private spawnRegularEnemy() {
@@ -384,9 +449,10 @@ export default abstract class CombatScene extends Phaser.Scene {
 
     // Chase player
     const angle = Phaser.Math.Angle.Between(enemy.x, enemy.y, this.player.x, this.player.y);
+    const speed = enemy.getData('isSlowed') ? this.regularEnemyConfig.speed * 0.5 : this.regularEnemyConfig.speed;
     enemy.setVelocity(
-      Math.cos(angle) * this.regularEnemyConfig.speed,
-      Math.sin(angle) * this.regularEnemyConfig.speed
+      Math.cos(angle) * speed,
+      Math.sin(angle) * speed
     );
     enemy.setFlipX(this.player.x < enemy.x);
 
@@ -403,9 +469,10 @@ export default abstract class CombatScene extends Phaser.Scene {
 
   private runBossAI(boss: any, time: number) {
     const angle = Phaser.Math.Angle.Between(boss.x, boss.y, this.player.x, this.player.y);
+    const speed = boss.getData('isSlowed') ? this.bossConfig.speed * 0.5 : this.bossConfig.speed;
     boss.setVelocity(
-      Math.cos(angle) * this.bossConfig.speed,
-      Math.sin(angle) * this.bossConfig.speed
+      Math.cos(angle) * speed,
+      Math.sin(angle) * speed
     );
 
     const lastShot = boss.getData('lastShot') || 0;
@@ -538,6 +605,8 @@ export default abstract class CombatScene extends Phaser.Scene {
     if (this.playerDead) { proj.destroy(); return; }
     proj.destroy();
 
+    if (this.shieldActive) return;
+
     if (Math.random() < 0.15) {
       this.showFloatingText(player.x, player.y - 22, 'BLOCK', '#4488FF');
       return;
@@ -556,6 +625,7 @@ export default abstract class CombatScene extends Phaser.Scene {
   // overlap(enemies, player, cb) → same Phaser rule → cb(player, enemy)
   private collidePlayerEnemy(player: any, enemy: any) {
     if (this.playerDead) return;
+    if (this.shieldActive) return;
     const lastDmgTime = enemy.getData('lastMeleeDmg') || 0;
     const now = this.time.now;
     if (now > lastDmgTime + 900) {

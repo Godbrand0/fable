@@ -15,7 +15,7 @@ export default class ObsidianPeakScene extends CombatScene {
   protected regularEnemyConfig: EnemyConfig = {
     key: 'obsidian_golem',
     name: 'Obsidian Golem',
-    hp: 60,
+    hp: 250,
     speed: 30,
     damage: 18,
     points: 35,
@@ -24,7 +24,7 @@ export default class ObsidianPeakScene extends CombatScene {
   protected bossConfig: EnemyConfig = {
     key: 'fire_demon',
     name: 'Fire Demon',
-    hp: 2100,
+    hp: 5500,
     speed: 25,
     damage: 45,
     points: 200,

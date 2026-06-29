@@ -34,6 +34,8 @@ export interface PlayerData {
   nftItems: NftItem[];        // on-chain NFT records
   ubiBuffActive: boolean;
   ubiBuffExpiresAt: number | null;
+  activeAbility: string | null;
+  pendingRewards: string[];
   lastProgressSync?: {        // last "Commit Progress" on-chain sync
     level: number;
     gold: number;
@@ -70,6 +72,8 @@ function withDefaults(p: any): PlayerData {
     nftItems:         p.nftItems         ?? p.nftitems     ?? [],
     ubiBuffActive:    p.ubiBuffActive     ?? p.ubibuffactive    ?? false,
     ubiBuffExpiresAt: p.ubiBuffExpiresAt  ?? p.ubibuffexpiresat ?? null,
+    activeAbility:    p.activeAbility     ?? p.activeability    ?? null,
+    pendingRewards:   p.pendingRewards    ?? p.pendingrewards   ?? [],
     lastProgressSync: p.lastProgressSync  ?? p.lastprogresssync ?? undefined,
   };
 }
@@ -95,6 +99,8 @@ function toDbRow(player: PlayerData) {
     nftitems:         player.nftItems,
     ubibuffactive:    player.ubiBuffActive,
     ubibuffexpiresat: player.ubiBuffExpiresAt,
+    activeability:    player.activeAbility ?? null,
+    pendingrewards:   player.pendingRewards ?? [],
     lastprogresssync: player.lastProgressSync ?? null,
   };
 }

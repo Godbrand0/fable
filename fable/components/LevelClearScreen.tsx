@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import gameBridge from '../game/systems/GameBridge';
-import { Heart, ArrowRight, CheckCircle2, Loader2 } from 'lucide-react';
+import { Heart, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { ZONE_LEVEL_REWARDS } from '../lib/nft';
 
 const ZONE_PROGRESSION: Record<string, string> = {
@@ -32,51 +32,26 @@ interface Props {
   onContinue: () => void;
 }
 
-type RewardState = 'idle' | 'claiming' | 'claimed' | 'already_claimed' | 'no_wallet' | 'not_verified' | 'error';
-
 export default function LevelClearScreen({ clearedZone, playerData, setPlayerData, walletAddress, onContinue }: Props) {
-  const [selected, setSelected]       = useState<string | null>(null);
-  const [justBought, setJustBought]   = useState<string | null>(null);
-  const [rewardState, setRewardState] = useState<RewardState>(walletAddress ? 'claiming' : 'no_wallet');
-  const [rewardTx, setRewardTx]       = useState<string | null>(null);
+  const [selected, setSelected]     = useState<string | null>(null);
+  const [justBought, setJustBought] = useState<string | null>(null);
 
   const nextScene    = ZONE_PROGRESSION[clearedZone] ?? 'TownScene';
   const nextZoneName = ZONE_NAMES[nextScene] ?? 'Town Hub';
   const isFinalZone  = clearedZone === 'ObsidianPeakScene';
   const zoneReward   = ZONE_LEVEL_REWARDS[clearedZone] ?? 0;
 
-  // Claim G$ reward on mount
+  // Add reward to pending
   useEffect(() => {
-    if (!walletAddress || !zoneReward) {
-      setRewardState(walletAddress ? 'error' : 'no_wallet');
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const res  = await fetch('/api/claim-level-reward', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ walletAddress, zone: clearedZone }),
-        });
-        const data = await res.json();
-        if (cancelled) return;
-        if (data.alreadyClaimed) {
-          setRewardState('already_claimed');
-        } else if (data.notVerified) {
-          setRewardState('not_verified');
-        } else if (data.success) {
-          setRewardState('claimed');
-          setRewardTx(data.txHash);
-        } else {
-          setRewardState('error');
-        }
-      } catch {
-        if (!cancelled) setRewardState('error');
+    if (!zoneReward) return;
+    setPlayerData((prev: any) => {
+      const pending = [...(prev.pendingRewards || [])];
+      if (!pending.includes(clearedZone)) {
+        pending.push(clearedZone);
       }
-    })();
-    return () => { cancelled = true; };
-  }, [walletAddress, clearedZone, zoneReward]);
+      return { ...prev, pendingRewards: pending };
+    });
+  }, [clearedZone, zoneReward, setPlayerData]);
 
   const selectedPotion = POTIONS.find(p => p.id === selected) ?? null;
   const canAfford = selectedPotion ? playerData.gold >= selectedPotion.cost : false;
@@ -113,52 +88,11 @@ export default function LevelClearScreen({ clearedZone, playerData, setPlayerDat
 
         {/* G$ Reward Banner */}
         {zoneReward > 0 && (
-          <div className={`rounded-xl border-2 px-4 py-3 flex items-center gap-3 transition-all ${
-            rewardState === 'claimed'        ? 'border-emerald-500 bg-emerald-950/40' :
-            rewardState === 'already_claimed'? 'border-zinc-600 bg-zinc-900/40' :
-            rewardState === 'claiming'       ? 'border-yellow-800/50 bg-yellow-950/20' :
-            rewardState === 'no_wallet'      ? 'border-zinc-700 bg-zinc-900/30' :
-            rewardState === 'not_verified'   ? 'border-orange-700/60 bg-orange-950/20' :
-                                               'border-red-900/50 bg-red-950/20'
-          }`}>
+          <div className="rounded-xl border-2 px-4 py-3 flex items-center gap-3 transition-all border-emerald-500 bg-emerald-950/40">
             <span className="text-2xl shrink-0">💲</span>
             <div className="flex-1 min-w-0">
-              {rewardState === 'claiming' && (
-                <div className="flex items-center gap-2">
-                  <Loader2 size={12} className="animate-spin text-yellow-400" />
-                  <span className="text-[11px] text-yellow-300 font-bold">Sending {zoneReward.toLocaleString()} G$ to your wallet…</span>
-                </div>
-              )}
-              {rewardState === 'claimed' && (
-                <>
-                  <p className="text-[12px] font-extrabold text-emerald-400">+{zoneReward.toLocaleString()} G$ earned!</p>
-                  {rewardTx && !rewardTx.startsWith('mock_') && (
-                    <p className="text-[9px] text-zinc-500 truncate">Tx: {rewardTx.slice(0, 16)}…</p>
-                  )}
-                </>
-              )}
-              {rewardState === 'already_claimed' && (
-                <p className="text-[11px] text-zinc-400">✓ Reward already claimed for this zone</p>
-              )}
-              {rewardState === 'no_wallet' && (
-                <p className="text-[11px] text-zinc-400">Connect wallet to earn {zoneReward.toLocaleString()} G$</p>
-              )}
-              {rewardState === 'not_verified' && (
-                <div className="flex flex-col gap-1">
-                  <p className="text-[11px] text-orange-300 font-bold">Verify your identity to earn G$</p>
-                  <a
-                    href="https://wallet.gooddollar.org"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[10px] text-orange-400 underline underline-offset-2 hover:text-orange-300"
-                  >
-                    Verify on GoodDollar →
-                  </a>
-                </div>
-              )}
-              {rewardState === 'error' && (
-                <p className="text-[11px] text-red-400">G$ reward failed — try again later</p>
-              )}
+              <p className="text-[12px] font-extrabold text-emerald-400">+{zoneReward.toLocaleString()} G$ added to Bank!</p>
+              <p className="text-[10px] text-zinc-400">Visit the Town Hub Bank to claim.</p>
             </div>
           </div>
         )}
