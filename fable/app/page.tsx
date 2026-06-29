@@ -143,8 +143,10 @@ export default function Home() {
       abilities:       [],
       inventory:       [],
       nftItems:        [],
-      ubiBuffActive:   false,
+      ubiBuffActive:    false,
       ubiBuffExpiresAt: null,
+      activeAbility:    null,
+      pendingRewards:   [],
     };
 
     try {
