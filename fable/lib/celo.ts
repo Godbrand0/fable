@@ -122,6 +122,9 @@ export const celoService = {
   },
 
   async isGoodDollarVerified(address: string): Promise<boolean> {
+    if (!this.hasInjectedProvider()) {
+      return localStorage.getItem(`fable_mock_verified_${address.toLowerCase()}`) === 'true';
+    }
     try {
       const root = await publicClient.readContract({
         address: IDENTITY_ADDRESS,
@@ -135,6 +138,22 @@ export const celoService = {
     }
   },
 
+  async getVerificationLink(address: string, callbackUrl: string): Promise<string> {
+    if (!this.hasInjectedProvider()) {
+      localStorage.setItem(`fable_mock_verified_${address.toLowerCase()}`, 'true');
+      return 'about:blank';
+    }
+    const walletClient = createWalletClient({ chain: celo, transport: custom((window as any).ethereum) });
+    const { IdentitySDK } = await import('@goodsdks/citizen-sdk');
+    const sdk = new IdentitySDK({
+      account: address as `0x${string}`,
+      publicClient: publicClient as any,
+      walletClient: walletClient as any,
+      env: 'production',
+    });
+    return await sdk.generateFVLink(true, callbackUrl, 42220);
+  },
+
   async claimUBI(address: string): Promise<boolean> {
     if (!this.hasInjectedProvider()) {
       const today = new Date().toDateString();
@@ -145,11 +164,21 @@ export const celoService = {
     }
     await this.ensureCeloNetwork();
     const walletClient = createWalletClient({ chain: celo, transport: custom((window as any).ethereum) });
-    const { request } = await publicClient.simulateContract({
-      account: address as `0x${string}`, address: UBISCHEME_ADDRESS, abi: UBISCHEME_ABI, functionName: 'claim',
+    const { IdentitySDK, ClaimSDK } = await import('@goodsdks/citizen-sdk');
+    const identitySDK = new IdentitySDK({
+      account: address as `0x${string}`,
+      publicClient: publicClient as any,
+      walletClient: walletClient as any,
+      env: 'production',
     });
-    const hash = await walletClient.writeContract(request);
-    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    const claimSDK = new ClaimSDK({
+      account: address as `0x${string}`,
+      publicClient: publicClient as any,
+      walletClient: walletClient as any,
+      identitySDK: identitySDK as any,
+      env: 'production',
+    });
+    const receipt = await claimSDK.claim();
     return receipt.status === 'success';
   },
 

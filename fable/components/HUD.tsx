@@ -248,7 +248,31 @@ export default function HUD({
       // Pre-check GoodDollar identity before attempting on-chain claim
       const verified = await celoService.isGoodDollarVerified(addr);
       if (!verified) {
-        showFlashMessage('Not GoodDollar verified. Visit wallet.gooddollar.org to verify.');
+        showFlashMessage('Opening GoodDollar Verification...');
+        try {
+          const callbackUrl = window.location.origin;
+          const fvLink = await celoService.getVerificationLink(addr, callbackUrl);
+          const popup = window.open(fvLink, 'faceVerification', 'width=620,height=720');
+          if (!popup) {
+            window.location.href = fvLink;
+            return;
+          }
+          
+          const checkInterval = setInterval(async () => {
+            if (popup.closed) {
+              clearInterval(checkInterval);
+              const stillVerified = await celoService.isGoodDollarVerified(addr);
+              if (stillVerified) {
+                showFlashMessage('Verification complete! Click Claim G$ UBI again.');
+              } else {
+                showFlashMessage('Verification closed or incomplete.');
+              }
+            }
+          }, 800);
+        } catch (err) {
+          console.error(err);
+          showFlashMessage('Could not start verification flow.');
+        }
         return;
       }
 
@@ -273,7 +297,7 @@ export default function HUD({
     } catch (e: any) {
       console.error(e);
       if (e?.message?.includes('not whitelisted') || e?.message?.includes('not GoodDollar verified')) {
-        showFlashMessage('Not GoodDollar verified. Visit wallet.gooddollar.org to verify.');
+        showFlashMessage('Not verified. Please verify your identity first.');
       } else {
         showFlashMessage('Claim failed. Please try again.');
       }
@@ -502,7 +526,7 @@ export default function HUD({
       <div className="w-full flex flex-col gap-4 pointer-events-auto bg-gradient-to-t from-black via-black/85 to-transparent absolute bottom-0 left-0 right-0 z-40">
         {/* Toggleable Drawer panels */}
         {activeTab !== 'none' && activeTab !== 'menu' && (
-          <div className="mx-4 p-4 rounded-xl border border-zinc-800 bg-zinc-950/95 backdrop-blur-xl max-h-[300px] overflow-y-auto animate-slide-up flex flex-col gap-3">
+          <div className="mx-4 mb-4 p-4 rounded-xl border border-zinc-800 bg-zinc-950/95 backdrop-blur-xl max-h-[80vh] overflow-y-auto animate-slide-up flex flex-col gap-3">
             {/* Panel Header */}
             <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
               <div className="flex items-center gap-1.5 text-xs font-bold text-purple-400 capitalize">
@@ -863,7 +887,8 @@ export default function HUD({
         )}
 
         {/* 4. Controls / Joysticks Row */}
-        <div className="flex justify-between items-end px-6 pb-6 pt-2 select-none pointer-events-none">
+        {(activeTab === 'none' || activeTab === 'menu') && (
+          <div className="flex justify-between items-end px-6 pb-6 pt-2 select-none pointer-events-none">
           {/* Left Joystick: Move */}
           <div className="pointer-events-auto">
             <Joystick type="left" label="Move" />
@@ -905,7 +930,7 @@ export default function HUD({
             <Joystick type="right" label="Aim/Shoot" />
           </div>
         </div>
-
+        )}
 
       </div>
 
