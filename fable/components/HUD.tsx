@@ -248,31 +248,8 @@ export default function HUD({
       // Pre-check GoodDollar identity before attempting on-chain claim
       const verified = await celoService.isGoodDollarVerified(addr);
       if (!verified) {
-        showFlashMessage('Opening GoodDollar Verification...');
-        try {
-          const callbackUrl = window.location.origin;
-          const fvLink = await celoService.getVerificationLink(addr, callbackUrl);
-          const popup = window.open(fvLink, 'faceVerification', 'width=620,height=720');
-          if (!popup) {
-            window.location.href = fvLink;
-            return;
-          }
-          
-          const checkInterval = setInterval(async () => {
-            if (popup.closed) {
-              clearInterval(checkInterval);
-              const stillVerified = await celoService.isGoodDollarVerified(addr);
-              if (stillVerified) {
-                showFlashMessage('Verification complete! Click Claim G$ UBI again.');
-              } else {
-                showFlashMessage('Verification closed or incomplete.');
-              }
-            }
-          }, 800);
-        } catch (err) {
-          console.error(err);
-          showFlashMessage('Could not start verification flow.');
-        }
+        showFlashMessage('Identity not verified. Please visit the Town Bank to verify your identity.');
+        setClaimingUBI(false);
         return;
       }
 

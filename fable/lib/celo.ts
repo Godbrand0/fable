@@ -143,7 +143,11 @@ export const celoService = {
       localStorage.setItem(`fable_mock_verified_${address.toLowerCase()}`, 'true');
       return 'about:blank';
     }
-    const walletClient = createWalletClient({ chain: celo, transport: custom((window as any).ethereum) });
+    const walletClient = createWalletClient({ 
+      account: address as `0x${string}`,
+      chain: celo, 
+      transport: custom((window as any).ethereum) 
+    });
     const { IdentitySDK } = await import('@goodsdks/citizen-sdk');
     const sdk = new IdentitySDK({
       account: address as `0x${string}`,
@@ -163,7 +167,11 @@ export const celoService = {
       return true;
     }
     await this.ensureCeloNetwork();
-    const walletClient = createWalletClient({ chain: celo, transport: custom((window as any).ethereum) });
+    const walletClient = createWalletClient({ 
+      account: address as `0x${string}`,
+      chain: celo, 
+      transport: custom((window as any).ethereum) 
+    });
     const { IdentitySDK, ClaimSDK } = await import('@goodsdks/citizen-sdk');
     const identitySDK = new IdentitySDK({
       account: address as `0x${string}`,
