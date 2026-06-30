@@ -110,7 +110,7 @@ export default function BankModal({
           <div className="py-8 flex flex-col items-center justify-center gap-2 text-center">
             <ShieldCheck size={32} className="text-zinc-700" />
             <p className="text-zinc-400 text-sm font-bold mt-2">No Pending Rewards</p>
-            <p className="text-zinc-600 text-[10px]">Clear combat zones to earn G$ payouts.</p>
+            <p className="text-zinc-600 text-[10px]">You haven't earned G$ yet. Defeat the level boss to earn more...</p>
           </div>
         ) : (
           <div className="flex flex-col gap-4">

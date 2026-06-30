@@ -68,7 +68,10 @@ export default function GameContainer({ playerData }: GameContainerProps) {
   }, [playerData]);
 
   return (
-    <div className="relative flex justify-center items-center w-full bg-black overflow-hidden border-b border-zinc-800 shadow-inner" style={{ aspectRatio: '16/9' }}>
+    <div
+      className="relative w-screen h-screen bg-black overflow-hidden"
+      style={{ touchAction: 'none' }}
+    >
       {/* Rotate-your-phone overlay — shown only on portrait devices */}
       {isPortrait && (
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/95 gap-4">

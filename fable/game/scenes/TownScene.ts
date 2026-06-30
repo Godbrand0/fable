@@ -45,7 +45,6 @@ export default class TownScene extends Phaser.Scene {
     this.bankEntered = false;
     this.guideEntered = false;
     this.inDialogue = false;
-    gameBridge.emit('request_player_data');
   }
 
   create() {
@@ -117,6 +116,7 @@ export default class TownScene extends Phaser.Scene {
     }
 
     gameBridge.emit('scene_changed', { scene: 'TownScene', title: 'Town Hub' });
+    gameBridge.emit('request_player_data');
   }
 
   // ─── Ground ──────────────────────────────────────────────────────────────────
@@ -441,7 +441,7 @@ export default class TownScene extends Phaser.Scene {
     const portalDefs = [
       {
         key: 'EmberFieldsScene',
-        label: 'Ember Fields\n(Lv 1-2)',
+        label: 'Ember Fields\n(Lv 1)',
         x: 360,
         color: 0xEF2929,
         stroke: 0xCC0000,
@@ -449,7 +449,7 @@ export default class TownScene extends Phaser.Scene {
       },
       {
         key: 'AshwaterMarshScene',
-        label: 'Ashwater Marsh\n(Lv 3-5)',
+        label: 'Ashwater Marsh\n(Lv 2)',
         x: WORLD_W / 2,
         color: 0x8A5BAA,
         stroke: 0x6A3A8A,
@@ -457,7 +457,7 @@ export default class TownScene extends Phaser.Scene {
       },
       {
         key: 'ObsidianPeakScene',
-        label: 'Obsidian Peak\n(Lv 6-8)',
+        label: 'Obsidian Peak\n(Lv 3)',
         x: WORLD_W - 360,
         color: 0x444444,
         stroke: 0x222222,
@@ -517,28 +517,28 @@ export default class TownScene extends Phaser.Scene {
     const g = this.add.graphics().setDepth(4);
     
     // Shadow
-    g.fillStyle(0x000000, 0.2);
-    g.fillEllipse(cx, cy + 12, 20, 10);
+    g.fillStyle(0x000000, 0.4);
+    g.fillEllipse(cx, cy + 16, 24, 12);
 
     // Body (Robes)
-    g.fillStyle(0x2B4C7E);
-    g.fillRect(cx - 10, cy - 10, 20, 22);
+    g.fillStyle(0x1A2E4C);
+    g.fillRect(cx - 12, cy - 14, 24, 28);
     
     // Belt
-    g.fillStyle(0x8A6A2A);
-    g.fillRect(cx - 10, cy, 20, 4);
+    g.fillStyle(0x5A421A);
+    g.fillRect(cx - 12, cy + 2, 24, 6);
 
     // Head
-    g.fillStyle(0xFFD3B6);
-    g.fillCircle(cx, cy - 16, 8);
+    g.fillStyle(0xDDAA88);
+    g.fillCircle(cx, cy - 20, 10);
 
     // White beard
-    g.fillStyle(0xFFFFFF);
-    g.fillTriangle(cx - 6, cy - 10, cx + 6, cy - 10, cx, cy);
+    g.fillStyle(0xDDDDDD);
+    g.fillTriangle(cx - 8, cy - 12, cx + 8, cy - 12, cx, cy + 2);
 
     // Guildmaster Thorne Nameplate
     this.add
-      .text(cx, cy - 34, 'Guildmaster', {
+      .text(cx, cy - 42, 'Guildmaster', {
         fontFamily: 'monospace',
         fontSize: '8px',
         color: '#88CCFF',

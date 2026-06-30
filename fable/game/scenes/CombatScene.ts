@@ -96,7 +96,6 @@ export default abstract class CombatScene extends Phaser.Scene {
     this.enemiesDefeated = 0;
     this.levelCleared = false;
     this.playerDead = false;
-    gameBridge.emit('request_player_data');
   }
 
   create() {
@@ -228,6 +227,8 @@ export default abstract class CombatScene extends Phaser.Scene {
 
     // Subclass biome decoration hook
     this.createBiomeLayout();
+
+    gameBridge.emit('request_player_data');
   }
 
   /** Override in subclasses to add biome-specific decorations and hazards */

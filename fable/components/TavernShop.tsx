@@ -45,6 +45,7 @@ export default function TavernShop({
   const [tab, setTab]       = useState<ShopTab>('gold');
   const [cursor, setCursor] = useState({ col: 0, row: 0 });
   const [buying, setBuying] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
   const lastJoyRef          = useRef(0);
 
   // Refs so event-listener closures always see fresh values
@@ -268,6 +269,12 @@ export default function TavernShop({
             <h1 className="text-[11px] font-extrabold text-yellow-400 tracking-widest uppercase leading-tight">The Tavern</h1>
             <p className="text-[8px] text-zinc-500 italic">"Fine arms & remedies for bold heroes."</p>
           </div>
+          <button 
+            onClick={() => setShowInfo(true)} 
+            className="ml-1 text-zinc-400 hover:text-white transition-colors bg-zinc-900 border border-zinc-700 px-1.5 py-0.5 rounded-full text-[9px] font-bold"
+          >
+            ℹ️
+          </button>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-bold text-yellow-400 bg-yellow-950/40 border border-yellow-800/40 px-2 py-0.5 rounded">
@@ -491,6 +498,24 @@ export default function TavernShop({
             </div>
           </div>
         </>
+      )}
+      
+      {/* ── Info Modal ──────────────────────────────────────────────────────── */}
+      {showInfo && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/90 p-4">
+          <div className="bg-zinc-950 border-2 border-yellow-900/50 p-4 rounded-xl flex flex-col gap-3 max-w-sm">
+            <h2 className="text-yellow-400 font-bold text-sm border-b border-zinc-800 pb-2">Tavern Guide</h2>
+            <p className="text-xs text-zinc-300">
+              <span className="text-yellow-400 font-bold">Gold (G)</span> is used to buy standard potions, healing, and temporary buffs. You earn it by defeating enemies in combat zones.
+            </p>
+            <p className="text-xs text-zinc-300">
+              <span className="text-emerald-400 font-bold">GoodDollar (G$)</span> is a real cryptocurrency. It is used to purchase premium NFT weapons and abilities. Claim your daily G$ UBI or earn it by clearing zones!
+            </p>
+            <button onClick={() => setShowInfo(false)} className="mt-2 bg-yellow-900/50 hover:bg-yellow-800/50 text-yellow-400 font-bold py-1.5 rounded border border-yellow-700/50 transition-colors">
+              Close
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

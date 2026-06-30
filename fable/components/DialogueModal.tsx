@@ -11,20 +11,24 @@ const DIALOGUE_STEPS = [
     target: 'guide'
   },
   {
-    text: "To the South lies the Gates. They lead to the Ember Fields and beyond. Slay the beasts there, and you'll earn Gold and GoodDollar.",
+    text: "To the South lies the Gates. Slay the beasts there, and you'll earn Gold (G) and GoodDollar (G$).",
     target: 'gates'
   },
   {
-    text: "But beware! You can't spend your G$ while out in the wild. Once you clear a zone, you must return here and visit the Bank to the Northwest to secure your rewards.",
+    text: "The lands are protected by Imps, demons that guard the local monsters. Slaying Imps drops orbs: Red Orbs for healing, and Golden Orbs for Gold (G) to buy in-game items.",
+    target: 'guide'
+  },
+  {
+    text: "After defeating the Level Boss, you earn the coveted Green Orb! This is GoodDollar (G$), real value that gets sent directly to the Bank.",
     target: 'bank'
   },
   {
-    text: "Got some coin burning a hole in your pocket? Visit the Tavern to the North. You can buy stronger weapons and powerful abilities to help you survive.",
-    target: 'tavern'
+    text: "But beware! You can't spend your G$ while out in the wild. Once you clear a zone, visit the Bank to the Northwest to secure your rewards. You can even withdraw G$ to real life after verifying!",
+    target: 'bank'
   },
   {
-    text: "That's all you need to know. Good luck out there!",
-    target: 'player'
+    text: "Got some coin burning a hole in your pocket? Visit the Tavern to the North to spend your tokens. Good luck out there!",
+    target: 'tavern'
   }
 ];
 

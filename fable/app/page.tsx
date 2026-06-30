@@ -368,19 +368,17 @@ export default function Home() {
 
   // ── PLAYING ─────────────────────────────────────────────────────────────────
   return (
-    <div className="flex items-center justify-center min-h-screen bg-[#111111] px-0 md:px-4">
-      <div className="relative w-full max-w-120 md:max-w-4xl lg:max-w-6xl xl:max-w-7xl bg-zinc-950 md:rounded-2xl border-0 md:border border-zinc-800 shadow-2xl overflow-hidden flex flex-col">
-        <GameContainer playerData={playerData} />
-        <HUD
-          playerData={playerData}
-          setPlayerData={setPlayerData}
-          walletConnected={walletConnected}
-          walletAddress={walletAddress}
-          connectWallet={handleWalletSignIn}
-          gDollarBalance={gDollarBalance}
-          refreshBalance={refreshBalance}
-        />
-      </div>
+    <div className="fixed inset-0 bg-black overflow-hidden">
+      <GameContainer playerData={playerData} />
+      <HUD
+        playerData={playerData}
+        setPlayerData={setPlayerData}
+        walletConnected={walletConnected}
+        walletAddress={walletAddress}
+        connectWallet={handleWalletSignIn}
+        gDollarBalance={gDollarBalance}
+        refreshBalance={refreshBalance}
+      />
     </div>
   );
 }

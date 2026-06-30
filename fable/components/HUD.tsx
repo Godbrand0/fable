@@ -25,7 +25,7 @@ interface HUDProps {
   refreshBalance: () => Promise<void>;
 }
 
-type TabType = 'none' | 'bag' | 'loadout' | 'stats' | 'codex' | 'wallet';
+type TabType = 'none' | 'bag' | 'loadout' | 'stats' | 'codex' | 'wallet' | 'menu';
 
 export default function HUD({
   playerData,
@@ -48,6 +48,7 @@ export default function HUD({
   const [message, setMessage] = useState<string | null>(null);
   const [claimingUBI, setClaimingUBI] = useState(false);
   const [addressCopied, setAddressCopied] = useState(false);
+  const [showGuideBanner, setShowGuideBanner] = useState(true);
 
 
   useEffect(() => {
@@ -366,20 +367,15 @@ export default function HUD({
 
       {/* 1. Top HUD Header */}
       <div className="w-full p-4 flex justify-between items-start pointer-events-auto bg-gradient-to-b from-black/80 via-black/30 to-transparent">
-        {/* Profile Card */}
+        {/* Left: Player Profile & Stats */}
         <div className="flex flex-col gap-1 bg-black/60 border border-zinc-800 p-2 rounded-lg backdrop-blur-md">
-          <div className="flex justify-between items-center text-xs">
-            <span className="text-purple-400 font-bold">LV {playerData.level}</span>
-            <span className="text-zinc-200 font-semibold max-w-[80px] truncate">{playerData.name}</span>
-          </div>
-          
           {/* HP Bar */}
-          <div className="w-36 flex flex-col gap-0.5 mt-1">
-            <div className="flex justify-between text-[9px] text-zinc-400">
-              <span className="flex items-center gap-0.5"><Heart size={8} className="text-red-500" /> HP</span>
+          <div className="w-24 flex flex-col gap-0.5 mt-0.5">
+            <div className="flex justify-between text-[8px] text-zinc-400 font-bold tracking-wider">
+              <span className="flex items-center gap-0.5 text-red-500">HP</span>
               <span>{playerData.hp}/{playerData.maxHp}</span>
             </div>
-            <div className="w-full bg-zinc-950 h-2 rounded border border-zinc-800 overflow-hidden">
+            <div className="w-full bg-zinc-950 h-1.5 rounded border border-zinc-800 overflow-hidden">
               <div 
                 className="bg-red-500 h-full transition-all duration-300"
                 style={{ width: `${(playerData.hp / playerData.maxHp) * 100}%` }}
@@ -388,9 +384,9 @@ export default function HUD({
           </div>
 
           {/* XP Bar */}
-          <div className="w-36 flex flex-col gap-0.5">
-            <div className="flex justify-between text-[9px] text-zinc-400">
-              <span>XP</span>
+          <div className="w-24 flex flex-col gap-0.5 mt-1">
+            <div className="flex justify-between text-[8px] text-zinc-400 font-bold tracking-wider">
+              <span className="text-green-500">XP</span>
               <span>{playerData.xp}/{playerData.level * 100}</span>
             </div>
             <div className="w-full bg-zinc-950 h-1 rounded border border-zinc-800 overflow-hidden">
@@ -430,6 +426,65 @@ export default function HUD({
               <span>{playerData.pendingRewards.length} Reward{playerData.pendingRewards.length > 1 ? 's' : ''} Pending! Visit Bank</span>
             </div>
           )}
+
+          {/* Guide Banner */}
+          {showGuideBanner && currentZone === 'Town Hub' && !inDialogue && !inTavern && !inBank && (
+            <div className="absolute top-16 left-1/2 -translate-x-1/2 pointer-events-auto bg-blue-950/90 border border-blue-500/50 p-2.5 rounded-lg shadow-2xl flex items-center gap-3 animate-bounce">
+              <span className="text-[10px] text-blue-200 font-bold font-mono tracking-widest uppercase">
+                Find Guildmaster Thorne in town for a guide!
+              </span>
+              <button 
+                onClick={() => setShowGuideBanner(false)} 
+                className="text-blue-400 hover:text-white transition-colors bg-blue-900/50 rounded p-1"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          )}
+
+          {/* Menu Dropdown Button */}
+          <div className="relative mt-1">
+            <button
+              onClick={() => setActiveTab(activeTab === 'menu' ? 'none' : 'menu')}
+              className="bg-zinc-900 border-2 border-zinc-700 px-3 py-1 text-[10px] font-bold text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors shadow-lg active:scale-95"
+              style={{ imageRendering: 'pixelated', fontFamily: 'monospace' }}
+            >
+              MENU {activeTab === 'menu' ? '▲' : '▼'}
+            </button>
+            
+            {activeTab === 'menu' && (
+              <div className="absolute top-full right-0 mt-1 flex flex-col bg-zinc-950/95 border border-zinc-700 rounded shadow-xl overflow-hidden min-w-[120px] z-50">
+                {[
+                  { id: 'bag', label: '🎒 Bag' },
+                  { id: 'loadout', label: '🗡️ Loadout' },
+                  { id: 'stats', label: '⏳ Stats' },
+                  { id: 'codex', label: '📖 Codex' },
+                  { id: 'wallet', label: '👤 Profile' }
+                ].map((item) => (
+                  <button 
+                    key={item.id} 
+                    onClick={() => setActiveTab(item.id as TabType)}
+                    className="px-3 py-2 text-left hover:bg-zinc-800 text-xs font-bold text-zinc-300 border-b border-zinc-800 last:border-0"
+                    style={{ fontFamily: 'monospace' }}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+                
+                {/* ── Claim UBI ── */}
+                <button
+                  onClick={handleClaimUBI}
+                  disabled={claimingUBI}
+                  className="px-3 py-2 text-left hover:bg-emerald-800/50 text-xs font-bold text-emerald-400 border-t border-zinc-700 disabled:opacity-50 flex items-center justify-between"
+                  style={{ fontFamily: 'monospace' }}
+                >
+                  <span>💰 Claim G$ UBI</span>
+                  {claimingUBI && <RefreshCw size={10} className="animate-spin ml-2" />}
+                </button>
+              </div>
+            )}
+          </div>
+
         </div>
       </div>
 
@@ -444,9 +499,9 @@ export default function HUD({
       </div>
 
       {/* 3. Bottom Controls Area & Panels */}
-      <div className="w-full flex flex-col gap-4 pointer-events-auto bg-gradient-to-t from-black via-black/85 to-transparent">
+      <div className="w-full flex flex-col gap-4 pointer-events-auto bg-gradient-to-t from-black via-black/85 to-transparent absolute bottom-0 left-0 right-0 z-40">
         {/* Toggleable Drawer panels */}
-        {activeTab !== 'none' && (
+        {activeTab !== 'none' && activeTab !== 'menu' && (
           <div className="mx-4 p-4 rounded-xl border border-zinc-800 bg-zinc-950/95 backdrop-blur-xl max-h-[300px] overflow-y-auto animate-slide-up flex flex-col gap-3">
             {/* Panel Header */}
             <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
@@ -800,17 +855,6 @@ export default function HUD({
                         <p className="text-[10px] text-zinc-600 italic">No active buffs</p>
                       )}
                     </div>
-
-                    {/* ── Claim UBI ── */}
-                    <button
-                      onClick={handleClaimUBI}
-                      disabled={claimingUBI}
-                      className="w-full bg-emerald-700 hover:bg-emerald-600 text-white font-bold py-2.5 rounded-xl text-[11px] disabled:opacity-50 flex justify-center items-center gap-1.5 tracking-wider active:scale-95 transition-all"
-                    >
-                      {claimingUBI
-                        ? <><RefreshCw size={12} className="animate-spin" /> Claiming…</>
-                        : <><Award size={12} /> Claim Daily G$ UBI</>}
-                    </button>
                   </div>
                 );
               })()}
@@ -862,28 +906,7 @@ export default function HUD({
           </div>
         </div>
 
-        {/* 5. Bottom Navigation Bar */}
-        <div className="w-full grid grid-cols-5 border-t border-zinc-800 bg-zinc-950 pointer-events-auto">
-          {[
-            { id: 'bag', label: 'Bag', icon: <Backpack size={16} /> },
-            { id: 'loadout', label: 'Loadout', icon: <Sword size={16} /> },
-            { id: 'stats', label: 'Stats', icon: <Award size={16} /> },
-            { id: 'codex', label: 'Codex', icon: <BookOpen size={16} /> },
-            { id: 'wallet', label: 'Profile', icon: <User size={16} /> }
-          ].map(tab => {
-            const active = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(active ? 'none' : tab.id as any)}
-                className={`flex flex-col items-center justify-center py-2.5 border-r border-zinc-900/50 last:border-0 hover:bg-zinc-900/40 transition-colors ${active ? 'bg-purple-950/20 text-purple-400 border-t-2 border-t-purple-500' : 'text-zinc-400'}`}
-              >
-                {tab.icon}
-                <span className="text-[8px] mt-1 font-bold tracking-wide">{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
+
       </div>
 
       {/* Level Clear / Potion Shop overlay — rendered LAST so it sits above all other HUD layers */}
