@@ -11,6 +11,18 @@ const DIALOGUE_STEPS = [
     target: 'guide'
   },
   {
+    text: "First, the controls! The LEFT joystick moves your character around the world. Use it to walk, explore, and navigate the land.",
+    target: 'player'
+  },
+  {
+    text: "The RIGHT joystick is your weapon — drag it in the direction you want to shoot! But beware, you cannot use it here in town. It only works out in the combat zones.",
+    target: 'gates'
+  },
+  {
+    text: "There is also an Ability button. However, it only activates after you have purchased an ability from the Tavern. Visit the Tavern and grab one first!",
+    target: 'tavern'
+  },
+  {
     text: "To the South lies the Gates. Slay the beasts there, and you'll earn Gold (G) and GoodDollar (G$).",
     target: 'gates'
   },

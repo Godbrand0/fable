@@ -329,21 +329,21 @@ export default function TavernShop({
             ))}
           </div>
 
-          <div className="flex-1 grid grid-cols-2 gap-2 p-2 min-h-0">
-            {Array.from({ length: GOLD_COLS }, (_, col) => (
-              <div key={col} className="flex flex-col gap-2 h-full">
-                {Array.from({ length: GOLD_ROWS }, (_, row) => {
-                  const item    = getGoldItem(col, row);
+          <div className="overflow-y-auto overscroll-contain flex-1" style={{ touchAction: 'pan-y' }}>
+            <div className="grid grid-cols-2 gap-2 p-2">
+              {Array.from({ length: GOLD_COLS }, (_, col) =>
+                Array.from({ length: GOLD_ROWS }, (_, row) => {
+                  const item     = getGoldItem(col, row);
                   const isActive = cursor.col === col && cursor.row === row;
                   if (!item) return (
-                    <div key={`${col}-${row}`} className="flex-1 rounded-lg border-2 border-zinc-800/20 bg-zinc-900/10" />
+                    <div key={`${col}-${row}`} className="rounded-lg border-2 border-zinc-800/20 bg-zinc-900/10 min-h-[90px]" />
                   );
                   const affordable = canAffordGold(item.goldCost);
                   return (
                     <button
                       key={item.id}
                       onClick={() => { if (isActive) handleBuyRef.current(); else setCursor({ col, row }); }}
-                      className={`flex-1 flex flex-col items-center justify-center p-1.5 rounded-lg border-2 transition-all text-center select-none
+                      className={`flex flex-col items-center justify-center p-1.5 rounded-lg border-2 transition-all text-center select-none min-h-[90px]
                         ${isActive ? 'bg-zinc-800/70 scale-[1.03]' : 'bg-zinc-900/30 hover:bg-zinc-800/30'}
                         ${goldCellBorder(item, isActive)}`}
                     >
@@ -355,9 +355,9 @@ export default function TavernShop({
                       </span>
                     </button>
                   );
-                })}
-              </div>
-            ))}
+                })
+              ).flat()}
+            </div>
           </div>
 
           {/* Gold item detail bar */}
@@ -407,10 +407,10 @@ export default function TavernShop({
             ))}
           </div>
 
-          <div className="flex-1 grid grid-cols-2 gap-2 p-2 min-h-0">
-            {Array.from({ length: GD_COLS }, (_, col) => (
-              <div key={col} className="flex flex-col gap-2 h-full">
-                {Array.from({ length: GD_ROWS }, (_, row) => {
+          <div className="overflow-y-auto overscroll-contain flex-1" style={{ touchAction: 'pan-y' }}>
+            <div className="grid grid-cols-2 gap-2 p-2">
+              {Array.from({ length: GD_COLS }, (_, col) =>
+                Array.from({ length: GD_ROWS }, (_, row) => {
                   const item     = getGdItem(col, row);
                   const isActive = cursor.col === col && cursor.row === row;
                   if (!item) return null;
@@ -420,7 +420,7 @@ export default function TavernShop({
                     <button
                       key={item.id}
                       onClick={() => { if (isActive) handleBuyRef.current(); else setCursor({ col, row }); }}
-                      className={`flex-1 flex flex-col items-center justify-center p-1.5 rounded-lg border-2 transition-all text-center select-none
+                      className={`flex flex-col items-center justify-center p-1.5 rounded-lg border-2 transition-all text-center select-none min-h-[100px]
                         ${isActive ? 'bg-zinc-800/70 scale-[1.03]' : 'bg-zinc-900/30 hover:bg-zinc-800/30'}
                         ${gdCellBorder(item, isActive)}`}
                     >
@@ -443,9 +443,9 @@ export default function TavernShop({
                       </div>
                     </button>
                   );
-                })}
-              </div>
-            ))}
+                })
+              ).flat()}
+            </div>
           </div>
 
           {/* G$ item detail bar */}
