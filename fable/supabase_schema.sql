@@ -44,6 +44,9 @@ CREATE TABLE IF NOT EXISTS public.players (
     ubibuffactive       BOOLEAN     NOT NULL DEFAULT false,
     ubibuffexpiresat    BIGINT               DEFAULT NULL,  -- JS Date.now() ms
 
+    -- Web3Auth embedded wallet: tracks whether the wallet has been funded with CELO for gas
+    celo_funded         BOOLEAN     NOT NULL DEFAULT false,
+
     -- Last on-chain progress commit
     lastprogresssync    JSONB                DEFAULT NULL,  -- { level, gold, txHash, syncedAt }
 
