@@ -150,6 +150,50 @@ export default function BankModal({
     }
   };
 
+  const [activeTab, setActiveTab] = useState<'claim' | 'withdraw'>('claim');
+  const [withdrawAddress, setWithdrawAddress] = useState('');
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [withdrawing, setWithdrawing] = useState(false);
+
+  const handleWithdraw = async () => {
+    if (withdrawing) return;
+    if (!withdrawAddress || !withdrawAmount) {
+      showMessage('Please enter address and amount.');
+      return;
+    }
+    const amountNum = Number(withdrawAmount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      showMessage('Invalid amount.');
+      return;
+    }
+    setWithdrawing(true);
+    try {
+      let addr = walletAddress;
+      if (!walletConnected || !addr) {
+        await connectWallet();
+        addr = (await celoService.getConnectedAddress()) ?? '';
+      }
+      if (!addr) {
+        showMessage('Connect wallet to withdraw.');
+        setWithdrawing(false);
+        return;
+      }
+      const success = await celoService.transferG$(addr, withdrawAddress, amountNum);
+      if (success) {
+        showMessage(`Successfully withdrew ${amountNum} G$`);
+        setWithdrawAddress('');
+        setWithdrawAmount('');
+      } else {
+        showMessage('Withdrawal failed.');
+      }
+    } catch (err) {
+      console.error(err);
+      showMessage('Withdrawal error.');
+    } finally {
+      setWithdrawing(false);
+    }
+  };
+
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-md font-mono pointer-events-auto">
       <div className="w-full max-w-sm flex flex-col gap-4 px-6 border border-emerald-900/50 bg-zinc-950 p-6 rounded-2xl shadow-2xl shadow-emerald-900/20">
@@ -168,88 +212,144 @@ export default function BankModal({
           </button>
         </div>
 
-        {/* Identity Verification Section */}
-        <div className="border-t border-b border-zinc-800/40 py-3 flex flex-col gap-2">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-zinc-400 flex items-center gap-1.5">
-              <ShieldCheck size={14} className={isVerified ? "text-emerald-400" : "text-zinc-600"} />
-              GoodDollar Status:
-            </span>
-            {isVerified === null ? (
-              <span className="text-zinc-500 animate-pulse text-[10px]">Checking...</span>
-            ) : isVerified ? (
-              <span className="text-emerald-400 font-bold bg-emerald-950/40 border border-emerald-900/40 px-2 py-0.5 rounded text-[10px] tracking-wider">
-                ✓ VERIFIED
-              </span>
-            ) : (
-              <span className="text-orange-400 font-bold bg-orange-950/40 border border-orange-900/40 px-2 py-0.5 rounded text-[10px] tracking-wider">
-                ✖ UNVERIFIED
-              </span>
-            )}
-          </div>
-          
-          {!isVerified && isVerified !== null && (
-            <div className="flex flex-col gap-2 mt-1">
-              <p className="text-[9px] text-zinc-400 leading-normal">
-                Verify your identity with GoodDollar to claim your earnings. This is a one-time process to prevent sybil attacks.
-              </p>
-              <button
-                onClick={startFaceVerification}
-                disabled={verifying}
-                className="w-full bg-orange-900/30 hover:bg-orange-800/40 border border-orange-700/50 text-orange-400 text-[10px] font-bold py-2 rounded-lg active:scale-95 transition-all text-center"
-              >
-                {verifying ? "Opening Verification Popup..." : "Verify Identity with GoodDollar"}
-              </button>
-            </div>
-          )}
+        {/* Tabs */}
+        <div className="flex border-b border-zinc-800/60 mt-2">
+          <button
+            onClick={() => setActiveTab('claim')}
+            className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider ${activeTab === 'claim' ? 'text-emerald-400 border-b-2 border-emerald-500' : 'text-zinc-500 hover:text-zinc-400'}`}
+          >
+            Claim Rewards
+          </button>
+          <button
+            onClick={() => setActiveTab('withdraw')}
+            className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider ${activeTab === 'withdraw' ? 'text-emerald-400 border-b-2 border-emerald-500' : 'text-zinc-500 hover:text-zinc-400'}`}
+          >
+            Withdraw G$
+          </button>
         </div>
 
-        {/* Content */}
-        {pendingZones.length === 0 ? (
-          <div className="py-4 flex flex-col items-center justify-center gap-2 text-center">
-            <ShieldCheck size={32} className="text-zinc-700" />
-            <p className="text-zinc-400 text-sm font-bold mt-2">No Pending Rewards</p>
-            <p className="text-zinc-600 text-[10px]">You haven't earned G$ yet. Defeat the level boss to earn more...</p>
-          </div>
-        ) : (
+        {activeTab === 'claim' && (
           <div className="flex flex-col gap-4">
-            <div className="bg-emerald-950/20 border border-emerald-900/50 rounded-xl p-4 flex flex-col items-center gap-2">
-              <span className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest">Pending Payout</span>
-              <div className="flex items-end gap-1">
-                <span className="text-4xl font-extrabold text-emerald-400 leading-none">{totalReward.toLocaleString()}</span>
-                <span className="text-emerald-600 font-bold pb-1">G$</span>
+            {/* Identity Verification Section */}
+            <div className="border-t border-b border-zinc-800/40 py-3 flex flex-col gap-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-zinc-400 flex items-center gap-1.5">
+                  <ShieldCheck size={14} className={isVerified ? "text-emerald-400" : "text-zinc-600"} />
+                  GoodDollar Status:
+                </span>
+                {isVerified === null ? (
+                  <span className="text-zinc-500 animate-pulse text-[10px]">Checking...</span>
+                ) : isVerified ? (
+                  <span className="text-emerald-400 font-bold bg-emerald-950/40 border border-emerald-900/40 px-2 py-0.5 rounded text-[10px] tracking-wider">
+                    ✓ VERIFIED
+                  </span>
+                ) : (
+                  <span className="text-orange-400 font-bold bg-orange-950/40 border border-orange-900/40 px-2 py-0.5 rounded text-[10px] tracking-wider">
+                    ✖ UNVERIFIED
+                  </span>
+                )}
               </div>
               
-              <div className="w-full mt-2 pt-2 border-t border-emerald-900/30 flex flex-col gap-1 text-[10px]">
-                {pendingZones.map((z: string) => (
-                  <div key={z} className="flex justify-between text-zinc-400">
-                    <span>{ZONE_DISPLAY[z] ?? z}</span>
-                    <span className="text-emerald-500">+{ZONE_LEVEL_REWARDS[z] || 0}</span>
-                  </div>
-                ))}
-              </div>
+              {!isVerified && isVerified !== null && (
+                <div className="flex flex-col gap-2 mt-1">
+                  <p className="text-[9px] text-zinc-400 leading-normal">
+                    Verify your identity with GoodDollar to claim your earnings. This is a one-time process to prevent sybil attacks.
+                  </p>
+                  <button
+                    onClick={startFaceVerification}
+                    disabled={verifying}
+                    className="w-full bg-orange-900/30 hover:bg-orange-800/40 border border-orange-700/50 text-orange-400 text-[10px] font-bold py-2 rounded-lg active:scale-95 transition-all text-center"
+                  >
+                    {verifying ? "Opening Verification Popup..." : "Verify Identity with GoodDollar"}
+                  </button>
+                </div>
+              )}
             </div>
 
+            {/* Content */}
+            {pendingZones.length === 0 ? (
+              <div className="py-4 flex flex-col items-center justify-center gap-2 text-center">
+                <ShieldCheck size={32} className="text-zinc-700" />
+                <p className="text-zinc-400 text-sm font-bold mt-2">No Pending Rewards</p>
+                <p className="text-zinc-600 text-[10px]">You haven't earned G$ yet. Defeat the level boss to earn more...</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4">
+                <div className="bg-emerald-950/20 border border-emerald-900/50 rounded-xl p-4 flex flex-col items-center gap-2">
+                  <span className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest">Pending Payout</span>
+                  <div className="flex items-end gap-1">
+                    <span className="text-4xl font-extrabold text-emerald-400 leading-none">{totalReward.toLocaleString()}</span>
+                    <span className="text-emerald-600 font-bold pb-1">G$</span>
+                  </div>
+                  
+                  <div className="w-full mt-2 pt-2 border-t border-emerald-900/30 flex flex-col gap-1 text-[10px]">
+                    {pendingZones.map((z: string) => (
+                      <div key={z} className="flex justify-between text-zinc-400">
+                        <span>{ZONE_DISPLAY[z] ?? z}</span>
+                        <span className="text-emerald-500">+{ZONE_LEVEL_REWARDS[z] || 0}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleClaim}
+                  disabled={claiming || !isVerified}
+                  className={`w-full font-bold py-3.5 rounded-xl text-sm disabled:opacity-50 flex justify-center items-center gap-2 tracking-wider active:scale-95 transition-all shadow-lg ${
+                    !isVerified 
+                      ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700' 
+                      : 'bg-emerald-700 hover:bg-emerald-600 text-white shadow-emerald-900/30'
+                  }`}
+                >
+                  {claiming ? (
+                    <><Loader2 size={16} className="animate-spin" /> Processing…</>
+                  ) : !isVerified ? (
+                    "Verify to Claim"
+                  ) : (
+                    `Claim ${totalReward.toLocaleString()} G$`
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'withdraw' && (
+          <div className="flex flex-col gap-4 py-2">
+            <p className="text-[10px] text-zinc-400">
+              Transfer your earned GoodDollars to an external wallet (like MetaMask or Valora) on the Celo network.
+            </p>
+            <div className="flex flex-col gap-2">
+              <label className="text-[9px] font-bold text-emerald-500 uppercase tracking-widest">Destination Address</label>
+              <input
+                type="text"
+                placeholder="0x..."
+                value={withdrawAddress}
+                onChange={(e) => setWithdrawAddress(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="text-[9px] font-bold text-emerald-500 uppercase tracking-widest">Amount (G$)</label>
+              <input
+                type="number"
+                placeholder="0.00"
+                value={withdrawAmount}
+                onChange={(e) => setWithdrawAmount(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
             <button
-              onClick={handleClaim}
-              disabled={claiming || !isVerified}
-              className={`w-full font-bold py-3.5 rounded-xl text-sm disabled:opacity-50 flex justify-center items-center gap-2 tracking-wider active:scale-95 transition-all shadow-lg ${
-                !isVerified 
-                  ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700' 
-                  : 'bg-emerald-700 hover:bg-emerald-600 text-white shadow-emerald-900/30'
-              }`}
+              onClick={handleWithdraw}
+              disabled={withdrawing || !withdrawAddress || !withdrawAmount}
+              className="w-full mt-2 bg-emerald-700 hover:bg-emerald-600 disabled:bg-zinc-800 disabled:text-zinc-500 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-xl text-sm flex justify-center items-center tracking-wider active:scale-95 transition-all shadow-lg shadow-emerald-900/30"
             >
-              {claiming ? (
-                <><Loader2 size={16} className="animate-spin" /> Processing…</>
-              ) : !isVerified ? (
-                "Verify to Claim"
-              ) : (
-                `Claim ${totalReward.toLocaleString()} G$`
-              )}
+              {withdrawing ? <><Loader2 size={16} className="animate-spin mr-2" /> Processing…</> : "Withdraw Funds"}
             </button>
           </div>
         )}
       </div>
+
     </div>
   );
 }

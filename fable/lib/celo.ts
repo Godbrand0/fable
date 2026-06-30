@@ -1,6 +1,7 @@
-import { createPublicClient, createWalletClient, custom, http, parseAbi, encodeAbiParameters, parseAbiParameters, parseUnits } from 'viem';
+import { createPublicClient, createWalletClient, custom, http, parseAbi, encodeAbiParameters, parseAbiParameters, parseUnits, WalletClient } from 'viem';
 import { celo } from 'viem/chains';
 import { FABLE_ITEMS_ADDRESS, FABLE_ITEMS_ABI, NftItem } from './nft';
+import { getWeb3AuthProvider } from './web3auth';
 
 const CELO_RPC = process.env.NEXT_PUBLIC_CELO_RPC_URL || 'https://forno.celo.org';
 
@@ -16,6 +17,7 @@ export const G$_ABI = parseAbi([
   'function balanceOf(address owner) view returns (uint256)',
   'function decimals() view returns (uint8)',
   'function transferAndCall(address to, uint256 value, bytes calldata data) returns (bool)',
+  'function transfer(address to, uint256 value) returns (bool)',
 ]);
 
 export const UBISCHEME_ABI = parseAbi([
@@ -34,8 +36,21 @@ export const celoService = {
     return typeof window !== 'undefined' && typeof (window as any).ethereum !== 'undefined';
   },
 
+  getWalletClient(account?: `0x${string}`): WalletClient | null {
+    const web3authProvider = getWeb3AuthProvider();
+    if (web3authProvider) {
+      return createWalletClient({ account, chain: celo, transport: custom(web3authProvider) });
+    }
+    if (this.hasInjectedProvider()) {
+      return createWalletClient({ account, chain: celo, transport: custom((window as any).ethereum) });
+    }
+    return null;
+  },
+
   // Switch the connected wallet to Celo mainnet. Call before any write transaction.
   async ensureCeloNetwork(): Promise<void> {
+    const web3authProvider = getWeb3AuthProvider();
+    if (web3authProvider) return; // Web3Auth is pre-configured for Celo
     if (!this.hasInjectedProvider()) return;
     try {
       await (window as any).ethereum.request({
@@ -62,9 +77,9 @@ export const celoService = {
   },
 
   async getConnectedAddress(): Promise<string | null> {
-    if (this.hasInjectedProvider()) {
+    const walletClient = this.getWalletClient();
+    if (walletClient) {
       try {
-        const walletClient = createWalletClient({ chain: celo, transport: custom((window as any).ethereum) });
         const [address] = await walletClient.getAddresses();
         return address || null;
       } catch {
@@ -75,8 +90,8 @@ export const celoService = {
   },
 
   async connectWallet(): Promise<string> {
-    if (this.hasInjectedProvider()) {
-      const walletClient = createWalletClient({ chain: celo, transport: custom((window as any).ethereum) });
+    const walletClient = this.getWalletClient();
+    if (walletClient) {
       const [address] = await walletClient.requestAddresses();
       return address;
     }
@@ -92,13 +107,18 @@ export const celoService = {
 
   async getG$Balance(address: string): Promise<string> {
     if (!address.startsWith('0x')) return '0.00';
-    if (!this.hasInjectedProvider()) {
+    if (!this.getWalletClient()) {
       return localStorage.getItem(`fable_mock_g$_bal_${address.toLowerCase()}`) || '50000.00';
     }
     try {
       const balance = await publicClient.readContract({ address: G$_ADDRESS, abi: G$_ABI, functionName: 'balanceOf', args: [address as `0x${string}`] });
       const decimals = await publicClient.readContract({ address: G$_ADDRESS, abi: G$_ABI, functionName: 'decimals' }).catch(() => 18);
-      return (Number(balance) / Math.pow(10, Number(decimals))).toFixed(2);
+      let formatted = parseUnits(balance.toString(), -decimals).toString();
+      if (formatted.length > 2) {
+        formatted = formatted.slice(0, -16);
+        return (Number(formatted) / 100).toFixed(2);
+      }
+      return '0.00';
     } catch {
       return '0.00';
     }
@@ -122,7 +142,8 @@ export const celoService = {
   },
 
   async isGoodDollarVerified(address: string): Promise<boolean> {
-    if (!this.hasInjectedProvider()) {
+    if (!address.startsWith('0x')) return false;
+    if (!this.getWalletClient()) {
       return localStorage.getItem(`fable_mock_verified_${address.toLowerCase()}`) === 'true';
     }
     try {
@@ -133,21 +154,20 @@ export const celoService = {
         args: [address as `0x${string}`],
       });
       return root !== '0x0000000000000000000000000000000000000000';
-    } catch {
+    } catch (err) {
+      console.error("isGoodDollarVerified error:", err);
       return false;
     }
   },
 
   async getVerificationLink(address: string, callbackUrl: string): Promise<string> {
-    if (!this.hasInjectedProvider()) {
+    if (!this.getWalletClient()) {
       localStorage.setItem(`fable_mock_verified_${address.toLowerCase()}`, 'true');
       return 'about:blank';
     }
-    const walletClient = createWalletClient({ 
-      account: address as `0x${string}`,
-      chain: celo, 
-      transport: custom((window as any).ethereum) 
-    });
+    const walletClient = this.getWalletClient(address as `0x${string}`);
+    if (!walletClient) throw new Error("WalletClient not found");
+
     const { IdentitySDK } = await import('@goodsdks/citizen-sdk');
     const sdk = new IdentitySDK({
       account: address as `0x${string}`,
@@ -159,7 +179,7 @@ export const celoService = {
   },
 
   async claimUBI(address: string): Promise<boolean> {
-    if (!this.hasInjectedProvider()) {
+    if (!this.getWalletClient()) {
       const today = new Date().toDateString();
       localStorage.setItem(`fable_last_claim_${address.toLowerCase()}`, today);
       const currentBal = Number(await this.getG$Balance(address));
@@ -167,11 +187,9 @@ export const celoService = {
       return true;
     }
     await this.ensureCeloNetwork();
-    const walletClient = createWalletClient({ 
-      account: address as `0x${string}`,
-      chain: celo, 
-      transport: custom((window as any).ethereum) 
-    });
+    const walletClient = this.getWalletClient(address as `0x${string}`);
+    if (!walletClient) throw new Error("WalletClient not found");
+
     const { IdentitySDK, ClaimSDK } = await import('@goodsdks/citizen-sdk');
     const identitySDK = new IdentitySDK({
       account: address as `0x${string}`,
@@ -188,6 +206,28 @@ export const celoService = {
     });
     const receipt = await claimSDK.claim();
     return receipt.status === 'success';
+  },
+
+  async transferG$(from: string, to: string, amount: number): Promise<boolean> {
+    const walletClient = this.getWalletClient(from as `0x${string}`);
+    if (!walletClient) throw new Error("WalletClient not found");
+    await this.ensureCeloNetwork();
+    try {
+      const value = parseUnits(amount.toString(), 18);
+      const { request } = await publicClient.simulateContract({
+        address: G$_ADDRESS,
+        abi: G$_ABI,
+        functionName: 'transfer',
+        args: [to as `0x${string}`, value],
+        account: from as `0x${string}`
+      });
+      const hash = await walletClient.writeContract(request);
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      return receipt.status === 'success';
+    } catch (err) {
+      console.error("Transfer error:", err);
+      return false;
+    }
   },
 
   // Buy a Fable item: transfers G$ and mints the NFT in one transaction via transferAndCall.

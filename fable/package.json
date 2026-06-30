@@ -10,6 +10,9 @@
   "dependencies": {
     "@goodsdks/citizen-sdk": "^1.2.5",
     "@supabase/supabase-js": "^2.108.1",
+    "@web3auth/base": "^9.7.0",
+    "@web3auth/ethereum-provider": "^9.7.0",
+    "@web3auth/modal": "^11.2.0",
     "lucide-react": "^1.17.0",
     "next": "16.2.9",
     "phaser": "^4.1.0",
