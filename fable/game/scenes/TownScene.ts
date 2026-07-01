@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import gameBridge from '../systems/GameBridge';
+import { audioManager } from '../../lib/audio';
 
 const WORLD_W = 1440;
 const WORLD_H = 1440;
@@ -50,6 +51,7 @@ export default class TownScene extends Phaser.Scene {
   create() {
     // World + physics bounds
     this.physics.world.setBounds(0, 0, WORLD_W, WORLD_H);
+    audioManager.playMusic('town');
 
     // Receive player data for zone unlock level and weapon texture
     gameBridge.on('sync_player_data', (data: any) => {

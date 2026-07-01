@@ -250,7 +250,8 @@ export const celoService = {
 
     try {
       await this.ensureCeloNetwork();
-      const walletClient = createWalletClient({ chain: celo, transport: custom((window as any).ethereum) });
+      const walletClient = this.getWalletClient(walletAddress as `0x${string}`);
+      if (!walletClient) throw new Error('No wallet client available');
       const { request } = await publicClient.simulateContract({
         account: walletAddress as `0x${string}`,
         address: G$_ADDRESS,

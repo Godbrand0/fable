@@ -5,6 +5,7 @@ import gameBridge from '../game/systems/GameBridge';
 import Joystick from './Joystick';
 import { dbService } from '../lib/supabaseClient';
 import { celoService } from '../lib/celo';
+import { audioManager } from '../lib/audio';
 import {
   Sword, Backpack, User, BookOpen,
   MapPin, Flame, Award, Heart, CheckCircle2, X, RefreshCw, Gem, Wallet2
@@ -38,6 +39,8 @@ export default function HUD({
 }: HUDProps) {
   const [activeTab, setActiveTab] = useState<TabType>('none');
   const [currentZone, setCurrentZone] = useState<string>('Booting...');
+  const [musicOn, setMusicOn] = useState(true);
+  const [sfxOn, setSfxOn] = useState(true);
   const [abilityCooldown, setAbilityCooldown] = useState(0); // 0 to 100 percentage
   const [cooldownRemaining, setCooldownRemaining] = useState(0); // seconds
   const [inTavern, setInTavern] = useState(false);
@@ -108,9 +111,10 @@ export default function HUD({
           newXP -= xpNeeded;
           newLevel += 1;
           statPoints += 5;
-          // Defer flash message — calling setState inside a setState updater
-          // triggers React's "setState during render" warning.
-          setTimeout(() => showFlashMessage(`LEVEL UP! You reached Level ${newLevel}!`), 0);
+          setTimeout(() => {
+            showFlashMessage(`LEVEL UP! You reached Level ${newLevel}!`);
+            audioManager.playSfx('levelUp');
+          }, 0);
         }
         const updated = { ...prev, xp: newXP, level: newLevel, statPoints };
         dbService.savePlayer(updated);
@@ -446,7 +450,7 @@ export default function HUD({
           {/* Menu Dropdown Button */}
           <div className="relative mt-1">
             <button
-              onClick={() => setActiveTab(activeTab === 'menu' ? 'none' : 'menu')}
+              onClick={() => { audioManager.playSfx('click'); setActiveTab(activeTab === 'menu' ? 'none' : 'menu'); }}
               className="bg-zinc-900 border-2 border-zinc-700 px-3 py-1 text-[10px] font-bold text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors shadow-lg active:scale-95"
               style={{ imageRendering: 'pixelated', fontFamily: 'monospace' }}
             >
@@ -462,9 +466,9 @@ export default function HUD({
                   { id: 'codex', label: '📖 Codex' },
                   { id: 'wallet', label: '👤 Profile' }
                 ].map((item) => (
-                  <button 
-                    key={item.id} 
-                    onClick={() => setActiveTab(item.id as TabType)}
+                  <button
+                    key={item.id}
+                    onClick={() => { audioManager.playSfx('click'); setActiveTab(item.id as TabType); }}
                     className="px-3 py-2 text-left hover:bg-zinc-800 text-xs font-bold text-zinc-300 border-b border-zinc-800 last:border-0"
                     style={{ fontFamily: 'monospace' }}
                   >
@@ -482,6 +486,34 @@ export default function HUD({
                   <span>💰 Claim G$ UBI</span>
                   {claimingUBI && <RefreshCw size={10} className="animate-spin ml-2" />}
                 </button>
+
+                {/* ── Audio Controls ── */}
+                <div className="flex border-t border-zinc-700">
+                  <button
+                    onClick={() => {
+                      const next = !musicOn;
+                      setMusicOn(next);
+                      audioManager.setMusicEnabled(next);
+                      if (next) audioManager.playSfx('click');
+                    }}
+                    className={`flex-1 px-2 py-2 text-[10px] font-bold text-center transition-colors ${musicOn ? 'text-yellow-400 hover:bg-zinc-800' : 'text-zinc-600 hover:bg-zinc-800'}`}
+                    style={{ fontFamily: 'monospace' }}
+                  >
+                    {musicOn ? '🎵 Music' : '🔇 Music'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      const next = !sfxOn;
+                      setSfxOn(next);
+                      audioManager.setSfxEnabled(next);
+                      if (next) audioManager.playSfx('click');
+                    }}
+                    className={`flex-1 px-2 py-2 text-[10px] font-bold text-center border-l border-zinc-700 transition-colors ${sfxOn ? 'text-yellow-400 hover:bg-zinc-800' : 'text-zinc-600 hover:bg-zinc-800'}`}
+                    style={{ fontFamily: 'monospace' }}
+                  >
+                    {sfxOn ? '🔊 SFX' : '🔇 SFX'}
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -752,7 +784,7 @@ export default function HUD({
                             onClick={async () => {
                               try {
                                 showFlashMessage('Opening Google login...');
-                                const { web3authLogin, getUserInfo } = await import('../lib/web3auth');
+                                const { web3authLogin } = await import('../lib/web3auth');
                                 await web3authLogin();
                                 // Get the connected address after login
                                 const newAddr = await celoService.getConnectedAddress();

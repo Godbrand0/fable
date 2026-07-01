@@ -66,6 +66,7 @@ export async function web3authLogout(): Promise<void> {
   if (web3authInstance.connected) {
     await web3authInstance.logout();
   }
+  isInitialized = false;
 }
 
 export function getWeb3AuthProvider(): any | null {

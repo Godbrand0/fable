@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import gameBridge from '../systems/GameBridge';
+import { audioManager } from '../../lib/audio';
 
 export interface EnemyConfig {
   key: string;
@@ -225,6 +226,8 @@ export default abstract class CombatScene extends Phaser.Scene {
     // Announce zone
     gameBridge.emit('scene_changed', { scene: this.scene.key, title: `${this.zoneName} (Lv ${this.minLevel}–${this.maxLevel})` });
 
+    audioManager.playMusic('combat');
+
     // Subclass biome decoration hook
     this.createBiomeLayout();
 
@@ -320,6 +323,7 @@ export default abstract class CombatScene extends Phaser.Scene {
     proj.setVelocity((dx / len) * 350, (dy / len) * 350);
     proj.setDepth(8);
     this.time.delayedCall(1500, () => { if (proj?.active) proj.destroy(); });
+    audioManager.playSfx('shoot');
   }
 
   private triggerActiveAbility() {
@@ -335,6 +339,7 @@ export default abstract class CombatScene extends Phaser.Scene {
 
   private useFireNova() {
     this.abilityCooldownActive = true;
+    audioManager.playSfx('fireNova');
     for (let i = 0; i < 8; i++) {
       const angle = (i / 8) * Math.PI * 2;
       const proj = this.playerProjectiles.create(this.player.x, this.player.y, 'projectile_nova');
@@ -352,6 +357,7 @@ export default abstract class CombatScene extends Phaser.Scene {
 
   private usePoisonCloak() {
     this.abilityCooldownActive = true;
+    audioManager.playSfx('poison');
     const ring = this.add.circle(this.player.x, this.player.y, 10, 0x44AA44, 0.45).setDepth(9);
     this.tweens.add({ targets: ring, scaleX: 12, scaleY: 12, alpha: 0, duration: 800, onComplete: () => ring.destroy() });
 
@@ -380,6 +386,7 @@ export default abstract class CombatScene extends Phaser.Scene {
   private useStoneShield() {
     this.abilityCooldownActive = true;
     this.shieldActive = true;
+    audioManager.playSfx('shield');
     this.shieldCircle = this.add.circle(this.player.x, this.player.y, 20, 0x6B3A1F, 0.55).setDepth(5);
 
     this.time.delayedCall(5000, () => {
@@ -439,6 +446,8 @@ export default abstract class CombatScene extends Phaser.Scene {
 
     this.bossHpBar = this.add.graphics().setDepth(14);
     this.cameras.main.flash(500, 200, 0, 0);
+    audioManager.playSfx('bossSpawn');
+    audioManager.playMusic('boss');
     // Boss warning text (camera-fixed)
     const camW = this.cameras.main.width;
     const camH = this.cameras.main.height;
@@ -570,6 +579,7 @@ export default abstract class CombatScene extends Phaser.Scene {
     hp -= dmg;
     enemy.setData('hp', hp);
 
+    audioManager.playSfx('hit');
     this.showFloatingText(enemy.x, enemy.y - 12, `${dmg}`, '#FFFFFF');
     enemy.setTint(0xFFFFFF);
     this.time.delayedCall(80, () => { if (enemy?.active) enemy.clearTint(); });
@@ -600,6 +610,7 @@ export default abstract class CombatScene extends Phaser.Scene {
     }
 
     const xpGain = points * 2;
+    audioManager.playSfx(isBoss ? 'bossDie' : 'enemyDie');
     this.showFloatingText(enemy.x, enemy.y - 28, `+${xpGain} XP`, '#8AE234');
     gameBridge.emit('player_xp_gained', xpGain);
     enemy.destroy();
@@ -608,6 +619,8 @@ export default abstract class CombatScene extends Phaser.Scene {
       if (this.bossHpBar) this.bossHpBar.destroy();
       this.levelCleared = true;
       this.player.setVelocity(0);
+      audioManager.playSfx('zoneClear');
+      audioManager.stopMusic();
       gameBridge.emit('zone_cleared', { zone: this.scene.key, score: points * 10 });
 
       // Victory flash
@@ -637,6 +650,7 @@ export default abstract class CombatScene extends Phaser.Scene {
     const dmg = Math.max(1, rawDmg - (this.playerDefense * 3));
     this.playerHP = Math.max(0, this.playerHP - dmg);
 
+    audioManager.playSfx('playerHurt');
     this.cameras.main.flash(100, 150, 0, 0);
     this.showFloatingText(player.x, player.y - 12, `-${dmg}`, '#EF2929');
     gameBridge.emit('player_health_changed', { hp: this.playerHP });
@@ -654,6 +668,7 @@ export default abstract class CombatScene extends Phaser.Scene {
       const rawDmg = enemy.isBoss ? this.bossConfig.damage : this.regularEnemyConfig.damage;
       const dmg = Math.max(1, rawDmg - (this.playerDefense * 3));
       this.playerHP = Math.max(0, this.playerHP - dmg);
+      audioManager.playSfx('playerHurt');
       this.cameras.main.flash(100, 150, 0, 0);
       this.showFloatingText(player.x, player.y - 12, `-${dmg}`, '#EF2929');
       gameBridge.emit('player_health_changed', { hp: this.playerHP });
@@ -667,14 +682,16 @@ export default abstract class CombatScene extends Phaser.Scene {
     this.playerDead = true;
     this.player.setVelocity(0);
     this.player.setTint(0x555753);
-    // Disable physics body so overlap callbacks stop firing
     this.player.body?.setEnable(false);
+    audioManager.playSfx('playerDie');
+    audioManager.stopMusic();
     gameBridge.emit('player_died', { zone: this.scene.key });
   }
 
   private collectCoin(player: any, coin: any) {
     const gold = Phaser.Math.Between(2, 5);
     this.playerGold += gold;
+    audioManager.playSfx('coin');
     this.showFloatingText(coin.x, coin.y - 8, `+${gold}G`, '#FFD700');
     gameBridge.emit('player_gold_changed', gold);
     coin.destroy();
@@ -683,6 +700,7 @@ export default abstract class CombatScene extends Phaser.Scene {
   private collectLoot(player: any, loot: any) {
     const heal = 10;
     this.playerHP = Math.min(this.playerMaxHP, this.playerHP + heal);
+    audioManager.playSfx('heal');
     this.showFloatingText(loot.x, loot.y - 8, `+${heal} HP`, '#EF2929');
     gameBridge.emit('player_health_changed', { hp: this.playerHP });
     loot.destroy();
