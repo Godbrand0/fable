@@ -334,7 +334,14 @@ export default function TavernShop({
                   return (
                     <button
                       key={item.id}
-                      onClick={() => { if (isActive) handleBuyRef.current(); else setCursor({ col, row }); }}
+                      onClick={() => {
+                        // cursorRef must be current *before* the buy fires — the buy
+                        // functions read cursorRef synchronously, but the effect that
+                        // normally syncs it from `cursor` state lags one render behind.
+                        cursorRef.current = { col, row };
+                        setCursor({ col, row });
+                        handleBuyRef.current();
+                      }}
                       className={`flex flex-col items-center justify-center p-1.5 rounded-lg border-2 transition-all text-center select-none min-h-[90px]
                         ${isActive ? 'bg-zinc-800/70 scale-[1.03]' : 'bg-zinc-900/30 hover:bg-zinc-800/30'}
                         ${goldCellBorder(item, isActive)}`}
@@ -411,7 +418,14 @@ export default function TavernShop({
                   return (
                     <button
                       key={item.id}
-                      onClick={() => { if (isActive) handleBuyRef.current(); else setCursor({ col, row }); }}
+                      onClick={() => {
+                        // cursorRef must be current *before* the buy fires — the buy
+                        // functions read cursorRef synchronously, but the effect that
+                        // normally syncs it from `cursor` state lags one render behind.
+                        cursorRef.current = { col, row };
+                        setCursor({ col, row });
+                        handleBuyRef.current();
+                      }}
                       className={`flex flex-col items-center justify-center p-1.5 rounded-lg border-2 transition-all text-center select-none min-h-[100px]
                         ${isActive ? 'bg-zinc-800/70 scale-[1.03]' : 'bg-zinc-900/30 hover:bg-zinc-800/30'}
                         ${gdCellBorder(item, isActive)}`}
