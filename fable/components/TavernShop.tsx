@@ -242,9 +242,6 @@ export default function TavernShop({
   }, [move]);
 
   // ── Render helpers ───────────────────────────────────────────────────────
-  const activeGdItem   = tab === 'gd'   ? getGdItem(cursor.col, cursor.row)   : null;
-  const activeGoldItem = tab === 'gold' ? getGoldItem(cursor.col, cursor.row) : null;
-
   const gdCellBorder = (item: GDollarItemDef, isActive: boolean) => {
     if (!isActive) return 'border-zinc-700/40';
     if (isGdOwned(item.id)) return 'border-blue-500 shadow-blue-500/20 shadow-lg';
@@ -261,21 +258,14 @@ export default function TavernShop({
   return (
     <div className="absolute inset-0 z-50 flex flex-col bg-black/97 backdrop-blur-sm font-mono text-zinc-100 pointer-events-auto overflow-hidden">
 
-      {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-yellow-900/40 bg-gradient-to-r from-amber-950/70 to-zinc-950 shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="text-base">🍺</span>
-          <div>
-            <h1 className="text-[11px] font-extrabold text-yellow-400 tracking-widest uppercase leading-tight">The Tavern</h1>
-            <p className="text-[8px] text-zinc-500 italic">"Fine arms & remedies for bold heroes."</p>
-          </div>
-          <button 
-            onClick={() => setShowInfo(true)} 
-            className="ml-1 text-zinc-400 hover:text-white transition-colors bg-zinc-900 border border-zinc-700 px-1.5 py-0.5 rounded-full text-[9px] font-bold"
-          >
-            ℹ️
-          </button>
-        </div>
+      {/* ── Info / close bar (title omitted — sidebar already shows "Tavern") ── */}
+      <div className="flex items-center justify-end gap-2 px-2 py-1 border-b border-yellow-900/40 bg-zinc-950 shrink-0">
+        <button
+          onClick={() => setShowInfo(true)}
+          className="text-zinc-400 hover:text-white transition-colors bg-zinc-900 border border-zinc-700 px-1.5 py-0.5 rounded-full text-[9px] font-bold"
+        >
+          ℹ️
+        </button>
         <button onClick={onLeave} className="text-zinc-500 hover:text-zinc-200 p-0.5">
           <X size={15} />
         </button>
@@ -322,74 +312,54 @@ export default function TavernShop({
           </div>
 
           <div className="overflow-y-auto overscroll-contain flex-1" style={{ touchAction: 'pan-y' }}>
-            <div className="grid grid-cols-2 gap-2 p-2">
+            <div className="grid grid-cols-2 gap-1.5 p-1.5">
               {Array.from({ length: GOLD_COLS }, (_, col) =>
                 Array.from({ length: GOLD_ROWS }, (_, row) => {
                   const item     = getGoldItem(col, row);
                   const isActive = cursor.col === col && cursor.row === row;
                   if (!item) return (
-                    <div key={`${col}-${row}`} className="rounded-lg border-2 border-zinc-800/20 bg-zinc-900/10 min-h-[90px]" />
+                    <div key={`${col}-${row}`} className="rounded-lg border-2 border-zinc-800/20 bg-zinc-900/10 min-h-16" />
                   );
                   const affordable = canAffordGold(item.goldCost);
+                  const buyNow = () => {
+                    // cursorRef must be current *before* the buy fires — the buy
+                    // functions read cursorRef synchronously, but the effect that
+                    // normally syncs it from `cursor` state lags one render behind.
+                    cursorRef.current = { col, row };
+                    setCursor({ col, row });
+                    handleBuyRef.current();
+                  };
                   return (
-                    <button
+                    <div
                       key={item.id}
-                      onClick={() => {
-                        // cursorRef must be current *before* the buy fires — the buy
-                        // functions read cursorRef synchronously, but the effect that
-                        // normally syncs it from `cursor` state lags one render behind.
-                        cursorRef.current = { col, row };
-                        setCursor({ col, row });
-                        handleBuyRef.current();
-                      }}
-                      className={`flex flex-col items-center justify-center p-1.5 rounded-lg border-2 transition-all text-center select-none min-h-[90px]
-                        ${isActive ? 'bg-zinc-800/70 scale-[1.03]' : 'bg-zinc-900/30 hover:bg-zinc-800/30'}
+                      onClick={() => setCursor({ col, row })}
+                      className={`flex flex-col items-center justify-center p-1 rounded-lg border-2 transition-all text-center select-none min-h-16 gap-0.5
+                        ${isActive ? 'bg-zinc-800/70' : 'bg-zinc-900/30 hover:bg-zinc-800/30'}
                         ${goldCellBorder(item, isActive)}`}
                     >
-                      <span className="text-2xl leading-none mb-1">{item.icon}</span>
-                      <span className={`text-[9px] font-bold leading-tight ${isActive ? 'text-zinc-100' : 'text-zinc-300'}`}>{item.name}</span>
-                      <span className="text-[8px] text-zinc-500 mt-0.5">{item.effect}</span>
-                      <span className={`text-[8px] font-bold mt-1 ${affordable ? 'text-yellow-400' : 'text-red-400'}`}>
-                        {item.goldCost}🪙
-                      </span>
-                    </button>
+                      <span className="text-lg leading-none">{item.icon}</span>
+                      <span className={`text-[8px] font-bold leading-tight ${isActive ? 'text-zinc-100' : 'text-zinc-300'}`}>{item.name}</span>
+                      <button
+                        onClick={buyNow}
+                        disabled={buying || !affordable}
+                        className={`w-full mt-0.5 px-1 py-0.5 rounded text-[8px] font-bold active:scale-95 transition-all ${
+                          affordable ? 'bg-yellow-600 hover:bg-yellow-500 text-black' : 'bg-zinc-800 text-red-400 border border-red-900/40'
+                        }`}
+                      >
+                        {affordable ? `BUY ${item.goldCost}🪙` : 'No Gold'}
+                      </button>
+                    </div>
                   );
                 })
               ).flat()}
             </div>
           </div>
 
-          {/* Gold item detail bar */}
-          <div className="border-t border-zinc-800 bg-zinc-950 px-3 py-2 shrink-0 flex flex-col gap-1.5">
-            {activeGoldItem && (
-              <div className="flex items-center gap-2">
-                <span className="text-xl shrink-0">{activeGoldItem.icon}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] font-bold text-zinc-100 truncate">{activeGoldItem.name}</span>
-                    <span className="text-[8px] bg-yellow-950/50 text-yellow-400 border border-yellow-800/40 px-1 py-0.5 rounded shrink-0">Gold</span>
-                  </div>
-                  <p className="text-[9px] text-zinc-400 italic">{activeGoldItem.desc}</p>
-                </div>
-                <button
-                  onClick={() => handleBuyRef.current()}
-                  disabled={buying || !canAffordGold(activeGoldItem.goldCost)}
-                  className={`shrink-0 px-3 py-1.5 rounded text-[10px] font-bold transition-all active:scale-95 ${
-                    buying ? 'bg-zinc-700 text-zinc-400'
-                    : canAffordGold(activeGoldItem.goldCost) ? 'bg-yellow-600 hover:bg-yellow-500 text-black'
-                    : 'bg-zinc-800 text-red-400 border border-red-900/40 cursor-not-allowed'
-                  }`}
-                >
-                  {buying ? '⏳' : canAffordGold(activeGoldItem.goldCost) ? `BUY ${activeGoldItem.goldCost}🪙` : 'Need Gold'}
-                </button>
-              </div>
-            )}
-            <div className="flex items-center justify-between pt-1 border-t border-zinc-800/50">
-              <span className="text-[8px] text-zinc-600">Tab = switch shop · ← → ↑ ↓ navigate · Enter to buy</span>
-              <button onClick={onLeave} className="text-[10px] font-bold text-red-400 hover:text-red-300 border border-red-900/40 bg-red-950/20 px-3 py-1.5 rounded active:scale-95 ml-2">
-                🚪 Leave
-              </button>
-            </div>
+          <div className="border-t border-zinc-800 bg-zinc-950 px-3 py-1.5 shrink-0 flex items-center justify-between">
+            <span className="text-[8px] text-zinc-600">← → ↑ ↓ navigate · Enter to buy</span>
+            <button onClick={onLeave} className="text-[9px] font-bold text-red-400 hover:text-red-300 border border-red-900/40 bg-red-950/20 px-2.5 py-1 rounded active:scale-95">
+              🚪 Leave
+            </button>
           </div>
         </>
       )}
@@ -407,7 +377,7 @@ export default function TavernShop({
           </div>
 
           <div className="overflow-y-auto overscroll-contain flex-1" style={{ touchAction: 'pan-y' }}>
-            <div className="grid grid-cols-2 gap-2 p-2">
+            <div className="grid grid-cols-2 gap-1.5 p-1.5">
               {Array.from({ length: GD_COLS }, (_, col) =>
                 Array.from({ length: GD_ROWS }, (_, row) => {
                   const item     = getGdItem(col, row);
@@ -415,93 +385,54 @@ export default function TavernShop({
                   if (!item) return null;
                   const owned      = isGdOwned(item.id);
                   const affordable = canAffordGd(item.gdCost);
+                  const buyNow = () => {
+                    cursorRef.current = { col, row };
+                    setCursor({ col, row });
+                    handleBuyRef.current();
+                  };
                   return (
-                    <button
+                    <div
                       key={item.id}
-                      onClick={() => {
-                        // cursorRef must be current *before* the buy fires — the buy
-                        // functions read cursorRef synchronously, but the effect that
-                        // normally syncs it from `cursor` state lags one render behind.
-                        cursorRef.current = { col, row };
-                        setCursor({ col, row });
-                        handleBuyRef.current();
-                      }}
-                      className={`flex flex-col items-center justify-center p-1.5 rounded-lg border-2 transition-all text-center select-none min-h-[100px]
-                        ${isActive ? 'bg-zinc-800/70 scale-[1.03]' : 'bg-zinc-900/30 hover:bg-zinc-800/30'}
+                      onClick={() => setCursor({ col, row })}
+                      className={`flex flex-col items-center justify-center p-1 rounded-lg border-2 transition-all text-center select-none min-h-20 gap-0.5
+                        ${isActive ? 'bg-zinc-800/70' : 'bg-zinc-900/30 hover:bg-zinc-800/30'}
                         ${gdCellBorder(item, isActive)}`}
                     >
-                      <div className="relative w-10 h-10 mb-1 shrink-0">
+                      <div className="relative w-8 h-8 shrink-0">
                         <Image
                           src={`/nft/${item.id}.png`}
                           alt={item.name}
                           fill
                           className="object-contain rounded"
-                          sizes="40px"
+                          sizes="32px"
                         />
                       </div>
-                      <span className={`text-[9px] font-bold leading-tight ${isActive ? 'text-zinc-100' : 'text-zinc-300'}`}>{item.name}</span>
-                      <span className="text-[8px] text-zinc-500 mt-0.5">{item.effect}</span>
-                      <div className="flex items-center gap-1 mt-1">
-                        <span className={`text-[8px] font-bold ${owned ? 'text-blue-400' : affordable ? 'text-emerald-400' : 'text-red-400'}`}>
-                          {owned ? '✓ OWNED' : `${item.gdCost} G$`}
-                        </span>
-                        {!owned && <Gem size={7} className="text-purple-500" />}
-                      </div>
-                    </button>
+                      <span className={`text-[8px] font-bold leading-tight ${isActive ? 'text-zinc-100' : 'text-zinc-300'}`}>{item.name}</span>
+                      {owned ? (
+                        <span className="w-full mt-0.5 px-1 py-0.5 rounded text-[8px] font-bold bg-blue-950/40 text-blue-400 border border-blue-800/50">✓ OWNED</span>
+                      ) : (
+                        <button
+                          onClick={buyNow}
+                          disabled={buying || !affordable}
+                          className={`w-full mt-0.5 px-1 py-0.5 rounded text-[8px] font-bold active:scale-95 transition-all ${
+                            affordable ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'bg-zinc-800 text-red-400 border border-red-900/40'
+                          }`}
+                        >
+                          {affordable ? `${item.gdCost} G$` : 'Need G$'}
+                        </button>
+                      )}
+                    </div>
                   );
                 })
               ).flat()}
             </div>
           </div>
 
-          {/* G$ item detail bar */}
-          <div className="border-t border-zinc-800 bg-zinc-950 px-3 py-2 shrink-0 flex flex-col gap-1.5">
-            {activeGdItem && (
-              <div className="flex items-center gap-2">
-                <div className="relative w-9 h-9 shrink-0">
-                  <Image
-                    src={`/nft/${activeGdItem.id}.png`}
-                    alt={activeGdItem.name}
-                    fill
-                    className="object-contain rounded"
-                    sizes="36px"
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-[11px] font-bold text-zinc-100 truncate">{activeGdItem.name}</span>
-                    <span className="text-[8px] bg-purple-950/50 text-purple-300 border border-purple-800/40 px-1 py-0.5 rounded shrink-0 flex items-center gap-0.5">
-                      <Gem size={7} /> NFT
-                    </span>
-                    <span className="text-[8px] capitalize text-zinc-500 shrink-0">{activeGdItem.category}</span>
-                  </div>
-                  <p className="text-[9px] text-zinc-400 italic">{activeGdItem.desc}</p>
-                </div>
-                <div className="shrink-0">
-                  {isGdOwned(activeGdItem.id) ? (
-                    <span className="text-[10px] text-blue-400 font-bold border border-blue-800/50 bg-blue-950/20 px-2 py-1 rounded">OWNED</span>
-                  ) : (
-                    <button
-                      onClick={() => handleBuyRef.current()}
-                      disabled={buying || !canAffordGd(activeGdItem.gdCost)}
-                      className={`px-3 py-1.5 rounded text-[10px] font-bold transition-all active:scale-95 ${
-                        buying ? 'bg-zinc-700 text-zinc-400'
-                        : canAffordGd(activeGdItem.gdCost) ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                        : 'bg-zinc-800 text-red-400 border border-red-900/40 cursor-not-allowed'
-                      }`}
-                    >
-                      {buying ? '⏳ Minting…' : canAffordGd(activeGdItem.gdCost) ? `💲 ${activeGdItem.gdCost} G$` : 'Need G$'}
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-            <div className="flex items-center justify-between pt-1 border-t border-zinc-800/50">
-              <span className="text-[8px] text-zinc-600">Tab = switch shop · purchases mint an NFT to your wallet</span>
-              <button onClick={onLeave} className="text-[10px] font-bold text-red-400 hover:text-red-300 border border-red-900/40 bg-red-950/20 px-3 py-1.5 rounded active:scale-95 ml-2">
-                🚪 Leave
-              </button>
-            </div>
+          <div className="border-t border-zinc-800 bg-zinc-950 px-3 py-1.5 shrink-0 flex items-center justify-between">
+            <span className="text-[8px] text-zinc-600">Purchases mint an NFT to your wallet</span>
+            <button onClick={onLeave} className="text-[9px] font-bold text-red-400 hover:text-red-300 border border-red-900/40 bg-red-950/20 px-2.5 py-1 rounded active:scale-95">
+              🚪 Leave
+            </button>
           </div>
         </>
       )}

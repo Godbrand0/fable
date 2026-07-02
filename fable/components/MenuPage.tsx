@@ -218,12 +218,12 @@ export default function MenuPage({
       )}
 
       {/* Header */}
-          <div className="w-full px-6 py-5 flex items-center justify-between border-b border-zinc-800 bg-zinc-900/60">
-            <div className="flex flex-col">
-              <h1 className="text-xl font-extrabold text-transparent bg-clip-text bg-linear-to-r from-yellow-400 to-amber-500 tracking-widest uppercase">
+          <div className="w-full px-4 py-2 flex items-center justify-between border-b border-zinc-800 bg-zinc-900/60 shrink-0">
+            <div className="flex items-baseline gap-2">
+              <h1 className="text-sm font-extrabold text-transparent bg-clip-text bg-linear-to-r from-yellow-400 to-amber-500 tracking-widest uppercase">
                 Fable RPG
               </h1>
-              <span className="text-[10px] text-zinc-500 uppercase tracking-widest">{playerData.name} · Lv {playerData.level}</span>
+              <span className="text-[9px] text-zinc-500 uppercase tracking-widest">{playerData.name} · Lv {playerData.level}</span>
             </div>
             <div className="flex items-center gap-3">
               <span className="text-xs font-bold text-yellow-500">🪙 {playerData.gold}G</span>
@@ -231,7 +231,7 @@ export default function MenuPage({
               {onClose && (
                 <button
                   onClick={() => { audioManager.playSfx('click'); onClose(); }}
-                  className="ml-2 flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-3 py-1.5 rounded-lg text-xs font-bold text-zinc-200"
+                  className="ml-2 flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-2.5 py-1 rounded-lg text-xs font-bold text-zinc-200"
                 >
                   <Play size={12} /> Resume
                 </button>
@@ -417,10 +417,14 @@ export default function MenuPage({
                       {playerData.arsenal?.map((weaponId: string) => {
                         const details = TAVERN_WEAPONS.find(w => w.id === weaponId) ?? { name: 'Bamboo Stick', attack: 5 };
                         const isEquipped = playerData.equippedWeapon === weaponId;
-                        const isNFT = playerData.nftItems?.some((n: any) => n.itemId === weaponId);
+                        const ownedNft = playerData.nftItems?.find((n: any) => n.itemId === weaponId);
+                        const isNFT = !!ownedNft;
                         return (
                           <div key={weaponId} className="flex flex-col gap-1.5 bg-black/40 border border-zinc-800/80 rounded-xl p-2.5">
-                            <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-zinc-950">
+                            <div
+                              className={`relative w-full aspect-square rounded-lg overflow-hidden bg-zinc-950 ${isNFT ? 'cursor-pointer' : ''}`}
+                              onClick={() => isNFT && setSelectedNft(ownedNft)}
+                            >
                               {isNFT ? (
                                 <Image src={`/nft/${weaponId}.png`} alt={details.name} fill className="object-cover" />
                               ) : (
@@ -453,9 +457,13 @@ export default function MenuPage({
                         {playerData.abilities.map((abilityId: string) => {
                           const def = GD_ITEMS.find(i => i.id === abilityId);
                           const isEquipped = playerData.activeAbility === abilityId;
+                          const ownedNft = playerData.nftItems?.find((n: any) => n.itemId === abilityId);
                           return (
                             <div key={abilityId} className="flex flex-col gap-1.5 bg-black/40 border border-zinc-800/80 rounded-xl p-2.5">
-                              <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-zinc-950">
+                              <div
+                                className={`relative w-full aspect-square rounded-lg overflow-hidden bg-zinc-950 ${ownedNft ? 'cursor-pointer' : ''}`}
+                                onClick={() => ownedNft && setSelectedNft(ownedNft)}
+                              >
                                 <Image src={`/nft/${abilityId}.png`} alt={def?.name ?? abilityId} fill className="object-cover" />
                               </div>
                               <span className="text-[10px] font-bold text-zinc-200 truncate flex items-center gap-1">
