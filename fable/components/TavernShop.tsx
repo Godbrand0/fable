@@ -302,15 +302,6 @@ export default function TavernShop({
       {/* ── Gold Shop grid ────────────────────────────────────────────────── */}
       {tab === 'gold' && (
         <>
-          {/* Column headers */}
-          <div className="grid grid-cols-2 border-b border-zinc-800/50 shrink-0">
-            {['🧪 Potions', '⚡ Buffs'].map((label, i) => (
-              <div key={i} className={`py-1.5 text-center text-[9px] font-bold uppercase tracking-widest border-r border-zinc-800/40 last:border-r-0 ${cursor.col === i && tab === 'gold' ? 'text-yellow-400 bg-yellow-950/20' : 'text-zinc-600'}`}>
-                {label}
-              </div>
-            ))}
-          </div>
-
           <div className="overflow-y-auto overscroll-contain flex-1" style={{ touchAction: 'pan-y' }}>
             <div className="grid grid-cols-2 gap-1.5 p-1.5">
               {Array.from({ length: GOLD_COLS }, (_, col) =>
@@ -354,28 +345,12 @@ export default function TavernShop({
               ).flat()}
             </div>
           </div>
-
-          <div className="border-t border-zinc-800 bg-zinc-950 px-3 py-1.5 shrink-0 flex items-center justify-between">
-            <span className="text-[8px] text-zinc-600">← → ↑ ↓ navigate · Enter to buy</span>
-            <button onClick={onLeave} className="text-[9px] font-bold text-red-400 hover:text-red-300 border border-red-900/40 bg-red-950/20 px-2.5 py-1 rounded active:scale-95">
-              🚪 Leave
-            </button>
-          </div>
         </>
       )}
 
       {/* ── G$ Shop grid ─────────────────────────────────────────────────── */}
       {tab === 'gd' && (
         <>
-          {/* Column headers */}
-          <div className="grid grid-cols-2 border-b border-zinc-800/50 shrink-0">
-            {['⚔️ Weapons (NFT)', '💫 Abilities (NFT)'].map((label, i) => (
-              <div key={i} className={`py-1.5 text-center text-[9px] font-bold uppercase tracking-widest border-r border-zinc-800/40 last:border-r-0 ${cursor.col === i && tab === 'gd' ? 'text-emerald-400 bg-emerald-950/20' : 'text-zinc-600'}`}>
-                {label}
-              </div>
-            ))}
-          </div>
-
           <div className="overflow-y-auto overscroll-contain flex-1" style={{ touchAction: 'pan-y' }}>
             <div className="grid grid-cols-2 gap-1.5 p-1.5">
               {Array.from({ length: GD_COLS }, (_, col) =>
@@ -426,13 +401,6 @@ export default function TavernShop({
                 })
               ).flat()}
             </div>
-          </div>
-
-          <div className="border-t border-zinc-800 bg-zinc-950 px-3 py-1.5 shrink-0 flex items-center justify-between">
-            <span className="text-[8px] text-zinc-600">Purchases mint an NFT to your wallet</span>
-            <button onClick={onLeave} className="text-[9px] font-bold text-red-400 hover:text-red-300 border border-red-900/40 bg-red-950/20 px-2.5 py-1 rounded active:scale-95">
-              🚪 Leave
-            </button>
           </div>
         </>
       )}

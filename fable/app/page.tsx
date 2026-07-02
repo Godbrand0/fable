@@ -109,6 +109,32 @@ export default function Home() {
     }
   };
 
+  // ── EXTERNAL WALLET SIGN-IN (MetaMask/Valora — for players who already hold G$) ──
+  const handleExternalWalletSignIn = async () => {
+    setAuthLoading(true);
+    setAuthError('');
+    try {
+      const addr = await celoService.connectWallet();
+      setWalletAddress(addr);
+      setWalletConnected(true);
+      refreshBalance(addr);
+
+      const existing = await dbService.getPlayerFromDB(addr);
+      if (existing) {
+        setPlayerData(existing);
+        setPhase('menu');
+      } else {
+        // External wallets already hold their own gas — no funding needed.
+        setPhase('creating');
+      }
+    } catch (err) {
+      console.error('Wallet sign-in failed', err);
+      setAuthError('Wallet connection failed. Try again or use Google.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
   // ── USERNAME SIGN-IN ────────────────────────────────────────────────────────
   const handleUsernameSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -259,6 +285,25 @@ export default function Home() {
                           Log in with Google
                         </>}
                   </button>
+
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-px bg-zinc-800" />
+                    <span className="text-[9px] text-zinc-600 uppercase tracking-widest">or</span>
+                    <div className="flex-1 h-px bg-zinc-800" />
+                  </div>
+
+                  <button
+                    onClick={handleExternalWalletSignIn}
+                    disabled={authLoading}
+                    className="w-full bg-linear-to-r from-purple-700 to-indigo-700 text-white py-3 rounded-xl text-xs font-bold tracking-wider hover:brightness-110 active:scale-95 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+                  >
+                    {authLoading
+                      ? <><Loader2 size={15} className="animate-spin" /> Connecting…</>
+                      : <><Wallet2 size={15} /> Connect Wallet</>}
+                  </button>
+                  <p className="text-[9px] text-zinc-600 text-center leading-relaxed">
+                    Already hold G$ in MetaMask or Valora? Connect it directly instead of creating a new wallet.
+                  </p>
                 </div>
               )}
 
