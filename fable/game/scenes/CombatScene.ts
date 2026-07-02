@@ -79,6 +79,7 @@ export default abstract class CombatScene extends Phaser.Scene {
   protected enemiesDefeated = 0;
   protected requiredDefeatsToBoss = 8;
   protected levelCleared = false;
+  private zoneProgressSeeded = false;
 
   // Death guard — prevents physics overlaps from calling playerDied multiple times
   private playerDead = false;
@@ -125,6 +126,13 @@ export default abstract class CombatScene extends Phaser.Scene {
         // Apply equipped weapon texture on load
         const textureKey = WEAPON_TEXTURE[data.equippedWeapon ?? 'bamboo_stick'] ?? 'player_bamboo';
         if (this.player?.active) this.player.setTexture(textureKey);
+
+        // Seed mid-zone kill progress once, from the player's last save
+        if (!this.zoneProgressSeeded) {
+          this.zoneProgressSeeded = true;
+          const seeded = data.zoneProgress?.[this.scene.key]?.enemiesDefeated;
+          if (typeof seeded === 'number') this.enemiesDefeated = seeded;
+        }
       }
     });
 
@@ -171,21 +179,29 @@ export default abstract class CombatScene extends Phaser.Scene {
     const unsubL = gameBridge.on('joystick_left', (dir: any) => { this.joystickMoveDir = dir; });
     const unsubR = gameBridge.on('joystick_right', (dir: any) => { this.joystickAimDir = dir; });
     const unsubA = gameBridge.on('ability_trigger', () => { this.triggerActiveAbility(); });
-    const unsubE = gameBridge.on('exit_zone', () => { this.returnToTown(); });
     const unsubSI = gameBridge.on('request_scene_info', () => {
       gameBridge.emit('scene_changed', { scene: this.scene.key, title: `${this.zoneName} (Lv ${this.minLevel}–${this.maxLevel})` });
     });
     const unsubNext = gameBridge.on('proceed_to_next_zone', (data: any) => {
       if (!this.levelCleared) return;
       if (!this.scene.isActive(this.scene.key) || !this.cameras?.main) return;
-      const target = data?.targetScene ?? 'TownScene';
+      const target = data?.targetScene ?? 'SunfallDunesScene';
       this.cameras.main.fadeOut(400, 0, 0, 0);
       this.time.delayedCall(400, () => { this.scene.start(target); });
     });
     const unsubW = gameBridge.on('weapon_changed', ({ textureKey }: any) => {
       this.player.setTexture(textureKey);
     });
-    this.events.on('destroy', () => { unsubL(); unsubR(); unsubA(); unsubE(); unsubSI(); unsubNext(); unsubW(); });
+    // Pause menu: freeze/resume the running scene without destroying it
+    const unsubPause = gameBridge.on('game_pause', () => { this.scene.pause(); });
+    const unsubResume = gameBridge.on('game_resume', () => { this.scene.resume(); });
+    // On player death: fully restart this zone fresh (fresh enemies, HP already
+    // restored by React before this fires)
+    const unsubRestart = gameBridge.on('restart_zone', () => { this.scene.restart(); });
+    this.events.on('destroy', () => {
+      unsubL(); unsubR(); unsubA(); unsubSI(); unsubNext(); unsubW();
+      unsubPause(); unsubResume(); unsubRestart();
+    });
 
     // Player HP label (world-space, updated per frame)
     this.playerHPLabel = this.add
@@ -627,6 +643,7 @@ export default abstract class CombatScene extends Phaser.Scene {
       this.cameras.main.flash(800, 255, 220, 0);
     } else {
       this.enemiesDefeated++;
+      gameBridge.emit('zone_progress_updated', { zone: this.scene.key, enemiesDefeated: this.enemiesDefeated });
       if (this.enemiesDefeated >= this.requiredDefeatsToBoss && !this.bossSpawned) {
         this.spawnBoss();
       }
@@ -712,12 +729,5 @@ export default abstract class CombatScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(16);
     this.tweens.add({ targets: ft, y: y - 32, alpha: 0, duration: 800, onComplete: () => ft.destroy() });
-  }
-
-  public returnToTown() {
-    if (this.levelCleared) return;
-    if (!this.scene.isActive(this.scene.key) || !this.cameras?.main) return;
-    this.cameras.main.fadeOut(300, 0, 0, 0);
-    this.time.delayedCall(300, () => { this.scene.start('TownScene'); });
   }
 }

@@ -5,8 +5,11 @@ import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import { dbService } from '../lib/supabaseClient';
 import { celoService } from '../lib/celo';
+import { audioManager } from '../lib/audio';
 import HUD from '../components/HUD';
-import { Check, Wallet2, User, Loader2, AlertTriangle } from 'lucide-react';
+import MenuPage from '../components/MenuPage';
+import gameBridge from '../game/systems/GameBridge';
+import { Wallet2, User, Loader2, AlertTriangle } from 'lucide-react';
 
 const GameContainer = dynamic(() => import('../components/GameContainer'), {
   ssr: false,
@@ -18,8 +21,8 @@ const GameContainer = dynamic(() => import('../components/GameContainer'), {
   ),
 });
 
-type Phase = 'splash' | 'auth' | 'creating' | 'playing';
-type AuthTab = 'wallet' | 'username';
+type Phase = 'splash' | 'auth' | 'creating' | 'menu' | 'playing';
+type AuthTab = 'google' | 'username';
 
 export default function Home() {
   const [phase, setPhase]         = useState<Phase>('splash');
@@ -32,15 +35,17 @@ export default function Home() {
   const [gDollarBalance, setGDollarBalance]   = useState('0.00');
 
   // Auth screen state
-  const [authTab, setAuthTab]       = useState<AuthTab>('wallet');
+  const [authTab, setAuthTab]       = useState<AuthTab>('google');
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError]   = useState('');
   const [usernameInput, setUsernameInput] = useState('');
 
   // Character creation state
   const [charName, setCharName]     = useState('');
-  const [selectedClass, setSelectedClass] = useState<'knight' | 'ranger' | 'berserker'>('knight');
   const [creating, setCreating]     = useState(false);
+
+  // In-game pause menu (overlays GameContainer + HUD without unmounting them)
+  const [showPauseMenu, setShowPauseMenu] = useState(false);
 
   // Splash: 10s progress bar → auth screen
   useEffect(() => {
@@ -68,12 +73,16 @@ export default function Home() {
     } catch { /* ignore */ }
   };
 
-  // ── WALLET SIGN-IN ──────────────────────────────────────────────────────────
+  // ── GOOGLE SIGN-IN (Web3Auth embedded wallet) ───────────────────────────────
   const handleWalletSignIn = async () => {
     setAuthLoading(true);
     setAuthError('');
     try {
-      const addr = await celoService.connectWallet();
+      const { web3authLogin } = await import('../lib/web3auth');
+      await web3authLogin();
+      const addr = await celoService.getConnectedAddress();
+      if (!addr) throw new Error('No address returned from Google login');
+
       setWalletAddress(addr);
       setWalletConnected(true);
       refreshBalance(addr);
@@ -82,12 +91,19 @@ export default function Home() {
       const existing = await dbService.getPlayerFromDB(addr);
       if (existing) {
         setPlayerData(existing);
-        setPhase('playing');
+        setPhase('menu');
       } else {
+        // Fresh embedded wallet — fund it with a little CELO for gas (fire-and-forget)
+        fetch('/api/fund-new-wallet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ walletAddress: addr }),
+        }).catch(console.error);
         setPhase('creating');
       }
-    } catch {
-      setAuthError('Wallet connection failed. Try again or use a username.');
+    } catch (err) {
+      console.error('Google sign-in failed', err);
+      setAuthError('Google sign-in failed. Try again or use a username.');
     } finally {
       setAuthLoading(false);
     }
@@ -103,7 +119,7 @@ export default function Home() {
       const found = await dbService.getPlayerByName(usernameInput);
       if (found) {
         setPlayerData(found);
-        setPhase('playing');
+        setPhase('menu');
       } else {
         setAuthError('No account found for that username. Please sign in with your wallet first to create a profile.');
       }
@@ -126,7 +142,7 @@ export default function Home() {
     const newPlayer = {
       wallet_address:  walletAddress,
       name:            charName.trim(),
-      class:           selectedClass,
+      class:           'knight',
       level:           1,
       xp:              0,
       gold:            100,
@@ -144,12 +160,15 @@ export default function Home() {
       ubiBuffExpiresAt: null,
       activeAbility:    null,
       pendingRewards:   [],
+      onboarded:        false,
+      zoneProgress:     {},
+      currentZone:      null,
     };
 
     try {
       const saved = await dbService.savePlayer(newPlayer);
       setPlayerData(saved);
-      setPhase('playing');
+      setPhase('menu');
     } catch (err) {
       console.error('Failed to create character:', err);
     } finally {
@@ -206,7 +225,7 @@ export default function Home() {
 
             {/* Tabs */}
             <div className="grid grid-cols-2 border-b border-zinc-800">
-              {([['wallet', 'Wallet', Wallet2], ['username', 'Username', User]] as const).map(([id, label, Icon]) => (
+              {([['google', 'Google'], ['username', 'Username']] as const).map(([id, label]) => (
                 <button
                   key={id}
                   onClick={() => { setAuthTab(id); setAuthError(''); }}
@@ -215,27 +234,30 @@ export default function Home() {
                       ? 'bg-zinc-900 text-yellow-400 border-b-2 border-yellow-500'
                       : 'text-zinc-500 hover:text-zinc-300'}`}
                 >
-                  <Icon size={13} /> {label}
+                  {id === 'google' ? <Wallet2 size={13} /> : <User size={13} />} {label}
                 </button>
               ))}
             </div>
 
             <div className="p-5 flex flex-col gap-4">
 
-              {/* WALLET TAB */}
-              {authTab === 'wallet' && (
+              {/* GOOGLE TAB */}
+              {authTab === 'google' && (
                 <div className="flex flex-col gap-4">
                   <p className="text-[11px] text-zinc-400 leading-relaxed text-center">
-                    Connect your Celo wallet to sign in or create a new hero. Your progress is saved to your address.
+                    Sign in with Google to get a secure embedded wallet — no extension needed. Your progress is saved to that wallet.
                   </p>
                   <button
                     onClick={handleWalletSignIn}
                     disabled={authLoading}
-                    className="w-full bg-linear-to-r from-yellow-500 to-amber-600 hover:brightness-110 text-black font-extrabold py-3.5 rounded-xl text-sm tracking-wider flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-60"
+                    className="w-full bg-white text-black py-3.5 rounded-xl text-sm font-bold tracking-wider hover:bg-gray-100 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
                   >
                     {authLoading
                       ? <><Loader2 size={15} className="animate-spin" /> Connecting…</>
-                      : <><Wallet2 size={15} /> Connect Wallet</>}
+                      : <>
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/><path d="M1 1h22v22H1z" fill="none"/></svg>
+                          Log in with Google
+                        </>}
                   </button>
                 </div>
               )}
@@ -319,38 +341,6 @@ export default function Home() {
               />
             </div>
 
-            <div className="flex flex-col gap-2">
-              <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Choose Class</label>
-              <div className="grid grid-cols-3 gap-2">
-                {([
-                  { id: 'knight',    name: 'Knight',    color: 'border-emerald-700 bg-emerald-950/20' },
-                  { id: 'ranger',    name: 'Ranger',    color: 'border-sky-700 bg-sky-950/20' },
-                  { id: 'berserker', name: 'Berserker', color: 'border-red-700 bg-red-950/20' },
-                ] as const).map(cls => {
-                  const sel = selectedClass === cls.id;
-                  return (
-                    <button key={cls.id} type="button" onClick={() => setSelectedClass(cls.id)}
-                      className={`flex flex-col items-center justify-center p-3 rounded-lg border-2 text-xs font-bold transition-all relative
-                        ${sel ? cls.color + ' border-yellow-500 scale-105' : 'border-zinc-800 hover:border-zinc-700'}`}
-                    >
-                      {sel && <Check size={12} className="absolute top-1 right-1 text-yellow-500" />}
-                      {cls.name}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Stats preview */}
-            <div className="bg-zinc-900/50 border border-zinc-800/80 p-3 rounded-lg text-xs text-zinc-400 flex flex-col gap-2">
-              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Starting Attributes</span>
-              <div className="grid grid-cols-2 gap-1.5 text-[11px]">
-                {selectedClass === 'knight'    && <><span>❤️ Max HP: <b className="text-zinc-200">130</b></span><span>🛡️ Defense: <b className="text-zinc-200">12</b></span><span>⚔️ Strength: <b className="text-zinc-200">12</b></span><span>⚡ Agility: <b className="text-zinc-200">8</b></span></>}
-                {selectedClass === 'ranger'    && <><span>❤️ Max HP: <b className="text-zinc-200">100</b></span><span>🛡️ Defense: <b className="text-zinc-200">8</b></span><span>⚔️ Strength: <b className="text-zinc-200">10</b></span><span>⚡ Agility: <b className="text-zinc-200">15</b></span></>}
-                {selectedClass === 'berserker' && <><span>❤️ Max HP: <b className="text-zinc-200">160</b></span><span>🛡️ Defense: <b className="text-zinc-200">10</b></span><span>⚔️ Strength: <b className="text-zinc-200">16</b></span><span>⚡ Agility: <b className="text-zinc-200">6</b></span></>}
-              </div>
-            </div>
-
             <button
               type="submit"
               disabled={creating || !charName.trim()}
@@ -366,11 +356,10 @@ export default function Home() {
     );
   }
 
-  // ── PLAYING ─────────────────────────────────────────────────────────────────
-  return (
-    <div className="fixed inset-0 bg-black overflow-hidden">
-      <GameContainer playerData={playerData} />
-      <HUD
+  // ── MENU ────────────────────────────────────────────────────────────────────
+  if (phase === 'menu') {
+    return (
+      <MenuPage
         playerData={playerData}
         setPlayerData={setPlayerData}
         walletConnected={walletConnected}
@@ -378,7 +367,35 @@ export default function Home() {
         connectWallet={handleWalletSignIn}
         gDollarBalance={gDollarBalance}
         refreshBalance={refreshBalance}
+        onStartGame={() => setPhase('playing')}
       />
+    );
+  }
+
+  // ── PLAYING ─────────────────────────────────────────────────────────────────
+  return (
+    <div className="fixed inset-0 bg-black overflow-hidden">
+      <GameContainer playerData={playerData} startZone={playerData?.currentZone || undefined} />
+      <HUD
+        playerData={playerData}
+        setPlayerData={setPlayerData}
+        walletAddress={walletAddress}
+        gDollarBalance={gDollarBalance}
+        onOpenMenu={() => { gameBridge.emit('game_pause'); audioManager.pauseMusic(); setShowPauseMenu(true); }}
+      />
+      {showPauseMenu && (
+        <MenuPage
+          playerData={playerData}
+          setPlayerData={setPlayerData}
+          walletConnected={walletConnected}
+          walletAddress={walletAddress}
+          connectWallet={handleWalletSignIn}
+          gDollarBalance={gDollarBalance}
+          refreshBalance={refreshBalance}
+          onStartGame={() => setPhase('playing')}
+          onClose={() => { gameBridge.emit('game_resume'); audioManager.resumeMusic(); setShowPauseMenu(false); }}
+        />
+      )}
     </div>
   );
 }

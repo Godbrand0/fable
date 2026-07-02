@@ -1,6 +1,6 @@
 'use client';
 
-// Lazy-initialised Web3Auth v11 singleton
+// Lazy-initialised Web3Auth v9 singleton
 // This module must only run on the client side.
 
 let web3authInstance: any = null;
@@ -9,6 +9,11 @@ let isInitialized = false;
 const clientId =
   process.env.NEXT_PUBLIC_WEB3AUTH_CLIENT_ID ||
   'BPi5PB_UiIZ-cPz1GtV5i1I2iOSOHuimiXBI0e-Oe_u6X3oVAbCiIQMAGN3Tu58cLx_jEw9bU1b5sN8mB4F_Txs';
+
+// Must match the network the client ID's project is configured for on the
+// Web3Auth Dashboard (Sapphire Devnet is the default for new/free-tier projects;
+// Mainnet requires the project to be explicitly upgraded there).
+const web3AuthNetwork = process.env.NEXT_PUBLIC_WEB3AUTH_NETWORK || 'sapphire_devnet';
 
 const CELO_CHAIN_CONFIG = {
   chainNamespace: 'eip155',
@@ -42,7 +47,7 @@ async function getWeb3Auth() {
 
   web3authInstance = new Web3Auth({
     clientId,
-    web3AuthNetwork: 'sapphire_mainnet',
+    web3AuthNetwork: web3AuthNetwork as any,
     privateKeyProvider: privateKeyProvider as any,
   });
 
@@ -52,7 +57,9 @@ async function getWeb3Auth() {
 export async function web3authLogin(): Promise<void> {
   const web3auth = await getWeb3Auth();
   if (!isInitialized) {
-    await web3auth.init();
+    // initModal() (not init()) is required for the modal-flavored Web3Auth class —
+    // it sets up the login modal UI that connect() depends on.
+    await web3auth.initModal();
     isInitialized = true;
   }
   if (!web3auth.connected) {

@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import Phaser from 'phaser';
 import { gameConfig } from '../game/config/gameConfig';
 import BootScene from '../game/scenes/BootScene';
-import TownScene from '../game/scenes/TownScene';
+import SunfallDunesScene from '../game/scenes/SunfallDunesScene';
 import EmberFieldsScene from '../game/scenes/EmberFieldsScene';
 import AshwaterMarshScene from '../game/scenes/AshwaterMarshScene';
 import ObsidianPeakScene from '../game/scenes/ObsidianPeakScene';
@@ -12,9 +12,11 @@ import gameBridge from '../game/systems/GameBridge';
 
 interface GameContainerProps {
   playerData: any;
+  /** Scene key to boot directly into (from Menu's Start/Continue). Defaults to the first zone. */
+  startZone?: string;
 }
 
-export default function GameContainer({ playerData }: GameContainerProps) {
+export default function GameContainer({ playerData, startZone }: GameContainerProps) {
   const gameRef = useRef<Phaser.Game | null>(null);
   const playerDataRef = useRef(playerData);
   const [isPortrait, setIsPortrait] = useState(false);
@@ -35,11 +37,13 @@ export default function GameContainer({ playerData }: GameContainerProps) {
     // 1. Initialize Phaser Game on client
     const configWithScenes: Phaser.Types.Core.GameConfig = {
       ...gameConfig,
-      scene: [BootScene, TownScene, EmberFieldsScene, AshwaterMarshScene, ObsidianPeakScene],
+      scene: [BootScene, SunfallDunesScene, EmberFieldsScene, AshwaterMarshScene, ObsidianPeakScene],
     };
 
     const game = new Phaser.Game(configWithScenes);
     gameRef.current = game;
+    // BootScene reads this to decide which zone to boot straight into.
+    game.registry.set('startZone', startZone || 'SunfallDunesScene');
 
     // 2. Setup initial listener to push character data to scenes when requested.
     // Uses a ref so the handler always reads the latest playerData, not the mount-time snapshot.

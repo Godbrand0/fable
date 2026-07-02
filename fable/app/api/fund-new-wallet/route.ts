@@ -15,17 +15,19 @@ const supabase = createClient(
 
 export async function POST(req: NextRequest) {
   try {
-    const { walletAddress, userId } = await req.json();
+    const { walletAddress } = await req.json();
 
-    if (!walletAddress || !userId) {
-      return NextResponse.json({ error: 'Missing walletAddress or userId' }, { status: 400 });
+    if (!walletAddress) {
+      return NextResponse.json({ error: 'Missing walletAddress' }, { status: 400 });
     }
+
+    const address = (walletAddress as string).toLowerCase();
 
     // Check if already funded in DB
     const { data: profile } = await supabase
       .from('players')
       .select('celo_funded')
-      .eq('user_id', userId)
+      .eq('wallet_address', address)
       .single();
 
     if (profile?.celo_funded) {
@@ -60,7 +62,7 @@ export async function POST(req: NextRequest) {
     // Mark as funded in DB
     await supabase
       .from('players')
-      .upsert({ user_id: userId, celo_funded: true }, { onConflict: 'user_id' });
+      .upsert({ wallet_address: address, celo_funded: true }, { onConflict: 'wallet_address' });
 
     console.log(`Funded ${walletAddress} with 0.005 CELO. Tx: ${hash}`);
     return NextResponse.json({ success: true, txHash: hash });

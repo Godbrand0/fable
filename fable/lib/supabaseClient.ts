@@ -36,6 +36,9 @@ export interface PlayerData {
   ubiBuffExpiresAt: number | null;
   activeAbility: string | null;
   pendingRewards: string[];
+  onboarded: boolean;          // has the player completed the Guildmaster tutorial?
+  zoneProgress: Record<string, { enemiesDefeated: number }>;  // mid-zone kill progress, keyed by scene key
+  currentZone: string | null;  // which zone scene "Continue" should resume into
   lastProgressSync?: {        // last "Commit Progress" on-chain sync
     level: number;
     gold: number;
@@ -74,6 +77,9 @@ function withDefaults(p: any): PlayerData {
     ubiBuffExpiresAt: p.ubiBuffExpiresAt  ?? p.ubibuffexpiresat ?? null,
     activeAbility:    p.activeAbility     ?? p.activeability    ?? null,
     pendingRewards:   p.pendingRewards    ?? p.pendingrewards   ?? [],
+    onboarded:        p.onboarded         ?? false,
+    zoneProgress:     p.zoneProgress      ?? p.zone_progress ?? {},
+    currentZone:      p.currentZone       ?? p.current_zone  ?? null,
     lastProgressSync: p.lastProgressSync  ?? p.lastprogresssync ?? undefined,
   };
 }
@@ -101,6 +107,9 @@ function toDbRow(player: PlayerData) {
     ubibuffexpiresat: player.ubiBuffExpiresAt,
     activeability:    player.activeAbility ?? null,
     pendingrewards:   player.pendingRewards ?? [],
+    onboarded:        player.onboarded ?? false,
+    zone_progress:    player.zoneProgress ?? {},
+    current_zone:     player.currentZone ?? null,
     lastprogresssync: player.lastProgressSync ?? null,
   };
 }

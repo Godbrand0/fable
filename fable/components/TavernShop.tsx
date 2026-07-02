@@ -276,17 +276,9 @@ export default function TavernShop({
             ℹ️
           </button>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold text-yellow-400 bg-yellow-950/40 border border-yellow-800/40 px-2 py-0.5 rounded">
-            🪙 {playerData.gold ?? 0}G
-          </span>
-          <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/50 border border-emerald-800/50 px-2 py-0.5 rounded">
-            💲 {parseFloat(gDollarBalance).toFixed(2)} G$
-          </span>
-          <button onClick={onLeave} className="text-zinc-500 hover:text-zinc-200 p-0.5">
-            <X size={15} />
-          </button>
-        </div>
+        <button onClick={onLeave} className="text-zinc-500 hover:text-zinc-200 p-0.5">
+          <X size={15} />
+        </button>
       </div>
 
       {/* ── Tab switcher ────────────────────────────────────────────────────── */}

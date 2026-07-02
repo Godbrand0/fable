@@ -47,13 +47,36 @@ CREATE TABLE IF NOT EXISTS public.players (
     -- Web3Auth embedded wallet: tracks whether the wallet has been funded with CELO for gas
     celo_funded         BOOLEAN     NOT NULL DEFAULT false,
 
+    -- Ability/reward state
+    activeability       TEXT                 DEFAULT NULL,
+    pendingrewards      TEXT[]      NOT NULL DEFAULT '{}',
+
     -- Last on-chain progress commit
     lastprogresssync    JSONB                DEFAULT NULL,  -- { level, gold, txHash, syncedAt }
+
+    -- Menu system: has this player completed the Guildmaster onboarding walkthrough?
+    onboarded           BOOLEAN     NOT NULL DEFAULT false,
+
+    -- Mid-zone save: per-zone kill progress + which zone "Continue" should resume into
+    zone_progress       JSONB       NOT NULL DEFAULT '{}'::jsonb,  -- { [sceneKey]: { enemiesDefeated } }
+    current_zone        TEXT                 DEFAULT NULL,
 
     -- Timestamps
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Migration for already-existing tables (CREATE TABLE IF NOT EXISTS above won't
+-- add columns to a table that already exists — run this against a live DB too)
+ALTER TABLE public.players
+    ADD COLUMN IF NOT EXISTS activeability  TEXT,
+    ADD COLUMN IF NOT EXISTS pendingrewards TEXT[] NOT NULL DEFAULT '{}',
+    ADD COLUMN IF NOT EXISTS onboarded      BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN IF NOT EXISTS zone_progress  JSONB NOT NULL DEFAULT '{}'::jsonb,
+    ADD COLUMN IF NOT EXISTS current_zone   TEXT DEFAULT NULL;
+
+-- Back-fill existing players so they don't see the new-player tutorial retroactively
+UPDATE public.players SET onboarded = true WHERE level > 1 OR maxunlockedzone > 1;
 
 -- Keep updated_at current on every write
 CREATE OR REPLACE FUNCTION public.set_updated_at()

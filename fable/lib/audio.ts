@@ -92,6 +92,7 @@ class AudioManager {
   private nextMelodyTime = 0;
   private nextBassTime = 0;
   private musicTimerId: ReturnType<typeof setTimeout> | null = null;
+  private paused = false;
 
   private readonly LOOKAHEAD = 0.12; // seconds to schedule ahead
   private readonly TICK_MS = 50;
@@ -200,6 +201,36 @@ class AudioManager {
       this.musicGain.gain.setValueAtTime(this.musicGain.gain.value, this.ctx.currentTime);
       this.musicGain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.8);
     }
+  }
+
+  // Silences the currently playing track without forgetting it — unlike
+  // stopMusic(), resumeMusic() picks the same track back up.
+  pauseMusic() {
+    if (this.paused || !this.ctx || !this.currentTrack) return;
+    this.paused = true;
+    if (this.musicTimerId) { clearTimeout(this.musicTimerId); this.musicTimerId = null; }
+    const now = this.ctx.currentTime;
+    this.musicGain.gain.cancelScheduledValues(now);
+    this.musicGain.gain.setValueAtTime(this.musicGain.gain.value, now);
+    this.musicGain.gain.linearRampToValueAtTime(0, now + 0.15);
+  }
+
+  resumeMusic() {
+    if (!this.paused) return;
+    this.paused = false;
+    const ctx = this.ensureCtx();
+    if (!ctx || !this.currentTrack) return;
+    const now = ctx.currentTime;
+    // Restart scheduling fresh rather than trying to resume mid-pattern —
+    // avoids drift from however long the pause lasted.
+    this.nextMelodyTime = now + 0.1;
+    this.nextBassTime = now + 0.1;
+    const targetVol = this.musicEnabled ? 0.22 : 0;
+    this.musicGain.gain.cancelScheduledValues(now);
+    this.musicGain.gain.setValueAtTime(this.musicGain.gain.value, now);
+    this.musicGain.gain.linearRampToValueAtTime(targetVol, now + 0.3);
+    this.musicGen++;
+    this.runScheduler(this.musicGen);
   }
 
   setMusicEnabled(on: boolean) {

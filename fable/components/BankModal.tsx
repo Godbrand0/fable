@@ -4,6 +4,7 @@ import { ZONE_LEVEL_REWARDS } from '../lib/nft';
 import { celoService } from '../lib/celo';
 
 const ZONE_DISPLAY: Record<string, string> = {
+  SunfallDunesScene:  'Sunfall Dunes',
   EmberFieldsScene:   'Ember Fields',
   AshwaterMarshScene: 'Ashwater Marsh',
   ObsidianPeakScene:  'Obsidian Peak',

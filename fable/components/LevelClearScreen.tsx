@@ -6,16 +6,16 @@ import { Heart, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { ZONE_LEVEL_REWARDS } from '../lib/nft';
 
 const ZONE_PROGRESSION: Record<string, string> = {
+  SunfallDunesScene: 'EmberFieldsScene',
   EmberFieldsScene: 'AshwaterMarshScene',
   AshwaterMarshScene: 'ObsidianPeakScene',
-  ObsidianPeakScene: 'TownScene',
 };
 
 const ZONE_NAMES: Record<string, string> = {
+  SunfallDunesScene: 'Sunfall Dunes',
   EmberFieldsScene: 'Ember Fields',
   AshwaterMarshScene: 'Ashwater Marsh',
   ObsidianPeakScene: 'Obsidian Peak',
-  TownScene: 'Town Hub',
 };
 
 const POTIONS = [
@@ -36,8 +36,8 @@ export default function LevelClearScreen({ clearedZone, playerData, setPlayerDat
   const [selected, setSelected]     = useState<string | null>(null);
   const [justBought, setJustBought] = useState<string | null>(null);
 
-  const nextScene    = ZONE_PROGRESSION[clearedZone] ?? 'TownScene';
-  const nextZoneName = ZONE_NAMES[nextScene] ?? 'Town Hub';
+  const nextScene    = ZONE_PROGRESSION[clearedZone];
+  const nextZoneName = nextScene ? ZONE_NAMES[nextScene] : '';
   const isFinalZone  = clearedZone === 'ObsidianPeakScene';
   const zoneReward   = ZONE_LEVEL_REWARDS[clearedZone] ?? 0;
 
@@ -67,7 +67,12 @@ export default function LevelClearScreen({ clearedZone, playerData, setPlayerDat
   };
 
   const handleContinue = () => {
-    gameBridge.emit('proceed_to_next_zone', { targetScene: nextScene });
+    if (nextScene) {
+      gameBridge.emit('proceed_to_next_zone', { targetScene: nextScene });
+    } else {
+      // Final zone cleared — nothing left to fight, send the player to the menu.
+      gameBridge.emit('open_menu');
+    }
     onContinue();
   };
 
@@ -92,7 +97,7 @@ export default function LevelClearScreen({ clearedZone, playerData, setPlayerDat
             <span className="text-2xl shrink-0">💲</span>
             <div className="flex-1 min-w-0">
               <p className="text-[12px] font-extrabold text-emerald-400">+{zoneReward.toLocaleString()} G$ added to Bank!</p>
-              <p className="text-[10px] text-zinc-400">Visit the Town Hub Bank to claim.</p>
+              <p className="text-[10px] text-zinc-400">Visit the Bank page to claim.</p>
             </div>
           </div>
         )}
@@ -164,7 +169,7 @@ export default function LevelClearScreen({ clearedZone, playerData, setPlayerDat
           className="w-full bg-linear-to-r from-yellow-500 to-amber-600 hover:brightness-110 text-black font-extrabold py-3.5 rounded-xl text-sm tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-amber-900/30"
         >
           {isFinalZone
-            ? '🏆 Return to Town Hub'
+            ? '🏆 Return to Menu'
             : <><span>Enter {nextZoneName}</span><ArrowRight size={15} /></>
           }
         </button>

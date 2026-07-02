@@ -25,7 +25,8 @@ export default class BootScene extends Phaser.Scene {
 
   create() {
     this.createTextures();
-    this.scene.start('TownScene');
+    const target = this.game.registry.get('startZone') || 'SunfallDunesScene';
+    this.scene.start(target);
   }
 
   private createTextures() {
@@ -218,6 +219,50 @@ export default class BootScene extends Phaser.Scene {
       g.fillStyle(0x333333);
       g.fillRect(5, 31, 3, 1);
       g.fillRect(13, 31, 3, 1);
+    });
+
+    // ─── SAND WRAITH BOSS (80×80) ─── Swirling desert spirit, bone-white core, sandstorm shroud ───
+    draw('sand_wraith', 80, 80, (g) => {
+      // Outer sand shroud (translucent swirling robe)
+      g.fillStyle(0xC8A86B, 0.55);
+      g.fillTriangle(40, 4, 4, 76, 76, 76);
+      g.fillStyle(0xDCBE82, 0.4);
+      g.fillTriangle(40, 14, 14, 70, 66, 70);
+
+      // Tattered hem streaks
+      g.fillStyle(0xB89458, 0.6);
+      g.fillRect(10, 66, 6, 12);
+      g.fillRect(24, 70, 5, 10);
+      g.fillRect(38, 72, 5, 10);
+      g.fillRect(52, 70, 5, 10);
+      g.fillRect(64, 66, 6, 12);
+
+      // Bone-white inner core
+      g.fillStyle(0xEFE6D0);
+      g.fillRect(30, 24, 20, 34);
+
+      // Ribcage detail
+      g.fillStyle(0xC8BFA0);
+      g.fillRect(32, 30, 16, 2);
+      g.fillRect(32, 36, 16, 2);
+      g.fillRect(32, 42, 16, 2);
+
+      // Hood shadow
+      g.fillStyle(0x2A2416);
+      g.fillCircle(40, 22, 13);
+
+      // Glowing sand-yellow eyes
+      g.fillStyle(0xFFCC44);
+      g.fillRect(34, 18, 5, 5);
+      g.fillRect(45, 18, 5, 5);
+      g.fillStyle(0xFFEE99);
+      g.fillRect(35, 19, 2, 2);
+      g.fillRect(46, 19, 2, 2);
+
+      // Wispy arms trailing into sand
+      g.fillStyle(0xC8A86B, 0.5);
+      g.fillTriangle(28, 30, 2, 46, 24, 54);
+      g.fillTriangle(52, 30, 78, 46, 56, 54);
     });
 
     // ─── LAVA PUMPKIN BOSS (96×96) ─── Dark stone + lava cracks + carved face + claws ───
