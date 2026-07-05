@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import TavernShop, { TAVERN_WEAPONS } from './TavernShop';
 import BankModal from './BankModal';
-import DialogueModal from './DialogueModal';
+import GuidedTour, { TOUR_STEPS } from './GuidedTour';
 import NFTDetailModal from './NFTDetailModal';
 import { dbService } from '../lib/supabaseClient';
 import { celoService } from '../lib/celo';
@@ -98,6 +98,31 @@ export default function MenuPage({
       dbService.savePlayer(updated);
       return updated;
     });
+  };
+
+  // ── Guided onboarding tour — forces new players through every menu page ────
+  const [tourStep, setTourStep] = useState(0);
+  const tourActive = !playerData.onboarded && !onClose;
+  const tourTarget = tourActive ? TOUR_STEPS[tourStep]?.target ?? null : null;
+
+  const handleNavClick = (id: Section) => {
+    if (tourActive) {
+      // During the tour only the highlighted tab responds
+      if (id !== tourTarget) return;
+      audioManager.playSfx('click');
+      setSection(id);
+      setTourStep(s => s + 1);
+      return;
+    }
+    audioManager.playSfx('click');
+    setSection(id);
+  };
+
+  const handleStartClick = () => {
+    if (tourActive && tourTarget !== 'start') return;
+    audioManager.playSfx('click');
+    if (tourActive) finishOnboarding();
+    onClose ? onClose() : onStartGame();
   };
 
   // ── Stat allocation (ported from HUD) ─────────────────────────────────────
@@ -202,9 +227,14 @@ export default function MenuPage({
 
   return (
     <div className="fixed inset-0 z-50 bg-zinc-950 flex flex-col font-mono text-zinc-200 overflow-hidden">
-      {/* One-time Guildmaster onboarding — blocks the menu until finished */}
-      {!playerData.onboarded && !onClose && (
-        <DialogueModal playerName={playerData?.name} onFinish={finishOnboarding} />
+      {/* One-time Guildmaster tour — walks new players through every page and
+          only unlocks Start Game at the end */}
+      {tourActive && (
+        <GuidedTour
+          playerName={playerData?.name}
+          stepIndex={tourStep}
+          onNext={() => setTourStep(s => s + 1)}
+        />
       )}
 
       {message && (
@@ -243,8 +273,12 @@ export default function MenuPage({
             {/* Nav sidebar */}
             <div className="w-56 shrink-0 border-r border-zinc-800 bg-zinc-900/40 flex flex-col p-3 gap-2 overflow-y-auto">
               <button
-                onClick={() => { audioManager.playSfx('click'); onClose ? onClose() : onStartGame(); }}
-                className="w-full bg-linear-to-r from-yellow-500 to-amber-600 hover:brightness-110 text-black font-extrabold py-3 rounded-xl text-sm tracking-wider flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-amber-900/20 mb-2"
+                data-tour="start"
+                onClick={handleStartClick}
+                disabled={tourActive && tourTarget !== 'start'}
+                className={`w-full bg-linear-to-r from-yellow-500 to-amber-600 hover:brightness-110 text-black font-extrabold py-3 rounded-xl text-sm tracking-wider flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-amber-900/20 mb-2
+                  ${tourActive && tourTarget !== 'start' ? 'opacity-40 cursor-not-allowed' : ''}
+                  ${tourTarget === 'start' ? 'ring-2 ring-yellow-300 animate-pulse' : ''}`}
               >
                 <Play size={15} />
                 {onClose ? 'Resume Game' : hasProgress ? 'Continue Game' : 'Start Game'}
@@ -253,9 +287,12 @@ export default function MenuPage({
               {NAV_ITEMS.map(item => (
                 <button
                   key={item.id}
-                  onClick={() => { audioManager.playSfx('click'); setSection(item.id); }}
+                  data-tour={item.id}
+                  onClick={() => handleNavClick(item.id)}
                   className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-left text-xs font-bold transition-colors
-                    ${section === item.id ? 'bg-purple-900/40 border border-purple-700 text-purple-200' : 'text-zinc-400 hover:bg-zinc-800 border border-transparent'}`}
+                    ${section === item.id ? 'bg-purple-900/40 border border-purple-700 text-purple-200' : 'text-zinc-400 hover:bg-zinc-800 border border-transparent'}
+                    ${tourTarget === item.id ? 'ring-2 ring-yellow-400 border-yellow-600 text-yellow-300 animate-pulse' : ''}
+                    ${tourActive && tourTarget !== item.id ? 'opacity-40' : ''}`}
                 >
                   {item.icon}
                   <span>{item.label}</span>

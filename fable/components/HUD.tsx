@@ -7,6 +7,7 @@ import { dbService } from '../lib/supabaseClient';
 import { audioManager } from '../lib/audio';
 import { MapPin, Flame, Award } from 'lucide-react';
 import LevelClearScreen from './LevelClearScreen';
+import MiniMap from './MiniMap';
 
 interface HUDProps {
   playerData: any;
@@ -195,35 +196,39 @@ export default function HUD({
     <div className="absolute inset-0 flex flex-col pointer-events-none select-none justify-between font-mono">
       {/* 1. Top HUD Header */}
       <div className="w-full p-4 flex justify-between items-start pointer-events-auto bg-linear-to-b from-black/80 via-black/30 to-transparent">
-        {/* Left: Player Profile & Stats */}
-        <div className="flex flex-col gap-1 bg-black/60 border border-zinc-800 p-2 rounded-lg backdrop-blur-md">
-          {/* HP Bar */}
-          <div className="w-24 flex flex-col gap-0.5 mt-0.5">
-            <div className="flex justify-between text-[8px] text-zinc-400 font-bold tracking-wider">
-              <span className="flex items-center gap-0.5 text-red-500">HP</span>
-              <span>{playerData.hp}/{playerData.maxHp}</span>
+        {/* Left: Player Profile & Stats + Minimap */}
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-1 bg-black/60 border border-zinc-800 p-2 rounded-lg backdrop-blur-md">
+            {/* HP Bar */}
+            <div className="w-24 flex flex-col gap-0.5 mt-0.5">
+              <div className="flex justify-between text-[8px] text-zinc-400 font-bold tracking-wider">
+                <span className="flex items-center gap-0.5 text-red-500">HP</span>
+                <span>{playerData.hp}/{playerData.maxHp}</span>
+              </div>
+              <div className="w-full bg-zinc-950 h-1.5 rounded border border-zinc-800 overflow-hidden">
+                <div
+                  className="bg-red-500 h-full transition-all duration-300"
+                  style={{ width: `${(playerData.hp / playerData.maxHp) * 100}%` }}
+                />
+              </div>
             </div>
-            <div className="w-full bg-zinc-950 h-1.5 rounded border border-zinc-800 overflow-hidden">
-              <div 
-                className="bg-red-500 h-full transition-all duration-300"
-                style={{ width: `${(playerData.hp / playerData.maxHp) * 100}%` }}
-              />
+
+            {/* XP Bar */}
+            <div className="w-24 flex flex-col gap-0.5 mt-1">
+              <div className="flex justify-between text-[8px] text-zinc-400 font-bold tracking-wider">
+                <span className="text-green-500">XP</span>
+                <span>{playerData.xp}/{playerData.level * 100}</span>
+              </div>
+              <div className="w-full bg-zinc-950 h-1 rounded border border-zinc-800 overflow-hidden">
+                <div
+                  className="bg-green-500 h-full transition-all duration-300"
+                  style={{ width: `${(playerData.xp / (playerData.level * 100)) * 100}%` }}
+                />
+              </div>
             </div>
           </div>
 
-          {/* XP Bar */}
-          <div className="w-24 flex flex-col gap-0.5 mt-1">
-            <div className="flex justify-between text-[8px] text-zinc-400 font-bold tracking-wider">
-              <span className="text-green-500">XP</span>
-              <span>{playerData.xp}/{playerData.level * 100}</span>
-            </div>
-            <div className="w-full bg-zinc-950 h-1 rounded border border-zinc-800 overflow-hidden">
-              <div 
-                className="bg-green-500 h-full transition-all duration-300"
-                style={{ width: `${(playerData.xp / (playerData.level * 100)) * 100}%` }}
-              />
-            </div>
-          </div>
+          {!inLevelClear && <MiniMap />}
         </div>
 
         {/* Currency & Zone */}

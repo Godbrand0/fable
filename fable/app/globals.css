@@ -40,3 +40,12 @@ button, a, input, textarea, select {
   user-select: auto;
 }
 
+/* ── Guided-tour arrow: horizontal bob pointing at the highlighted button ── */
+@keyframes tour-bob-x {
+  0%, 100% { transform: translateX(0); }
+  50%      { transform: translateX(8px); }
+}
+.tour-arrow {
+  animation: tour-bob-x 0.8s ease-in-out infinite;
+}
+

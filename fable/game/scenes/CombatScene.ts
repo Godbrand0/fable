@@ -169,6 +169,14 @@ export default abstract class CombatScene extends Phaser.Scene {
       loop: true,
     });
 
+    // Minimap feed for the React HUD
+    this.time.addEvent({
+      delay: 250,
+      callback: this.emitMinimapUpdate,
+      callbackScope: this,
+      loop: true,
+    });
+
     // Keyboard
     if (this.input.keyboard) {
       this.cursors = this.input.keyboard.createCursorKeys();
@@ -413,6 +421,22 @@ export default abstract class CombatScene extends Phaser.Scene {
 
     gameBridge.emit('ability_cooldown_started', { duration: 15000 });
     this.time.delayedCall(15000, () => { this.abilityCooldownActive = false; });
+  }
+
+  private emitMinimapUpdate() {
+    if (!this.player?.active) return;
+    const enemies = this.enemies.getChildren()
+      .filter((e: any) => e.active)
+      .map((e: any) => ({ x: e.x, y: e.y, isBoss: !!e.isBoss }));
+    gameBridge.emit('minimap_update', {
+      world: { w: WORLD_W, h: WORLD_H },
+      player: { x: this.player.x, y: this.player.y },
+      enemies,
+      defeated: this.enemiesDefeated,
+      required: this.requiredDefeatsToBoss,
+      bossSpawned: this.bossSpawned,
+      bossAlive: !!this.bossInstance?.active,
+    });
   }
 
   private spawnRegularEnemy() {
