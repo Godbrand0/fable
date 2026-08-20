@@ -47,10 +47,12 @@ export const ZONE_LEVEL_IDS: Record<string, number> = {
   EmberFieldsScene:   1,
   AshwaterMarshScene: 2,
   ObsidianPeakScene:  3,
+  SunfallDunesScene:  4,
 };
 
 // Human-readable G$ reward per level (matches setLevelReward calls)
 export const ZONE_LEVEL_REWARDS: Record<string, number> = {
+  SunfallDunesScene:  500,
   EmberFieldsScene:   500,
   AshwaterMarshScene: 1000,
   ObsidianPeakScene:  2000,

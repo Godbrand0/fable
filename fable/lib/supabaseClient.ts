@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NftItem } from './nft';
+import type { LeaderboardMode } from './scoreLedger';
 
 const supabaseUrl     = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -49,6 +50,7 @@ export interface PlayerData {
 
 export interface LeaderboardEntry {
   wallet_address: string;
+  mode: LeaderboardMode;
   player_name: string;
   zone_clears: number;
   score: number;
@@ -208,36 +210,37 @@ export const dbService = {
     return found ? withDefaults(found as any) : null;
   },
 
-  async getLeaderboard(): Promise<LeaderboardEntry[]> {
+  async getLeaderboard(mode: LeaderboardMode = 'single'): Promise<LeaderboardEntry[]> {
     if (supabase) {
-      const { data, error } = await supabase.from('leaderboard').select('*').order('score', { ascending: false }).limit(10);
+      const { data, error } = await supabase.from('leaderboard').select('*').eq('mode', mode).order('score', { ascending: false }).limit(10);
       if (!error && data) return data as LeaderboardEntry[];
     }
     const list: LeaderboardEntry[] = JSON.parse(localStorage.getItem(LEADERBOARD_KEY) || '[]');
-    return list.sort((a, b) => b.score - a.score).slice(0, 10);
+    return list.filter(e => (e.mode ?? 'single') === mode).sort((a, b) => b.score - a.score).slice(0, 10);
   },
 
-  async updateLeaderboard(walletAddress: string, name: string, score: number, clearIncrement = 0): Promise<void> {
+  async updateLeaderboard(walletAddress: string, name: string, score: number, clearIncrement = 0, mode: LeaderboardMode = 'single'): Promise<void> {
     const address = walletAddress.toLowerCase();
     if (supabase) {
-      const { data } = await supabase.from('leaderboard').select('*').eq('wallet_address', address).single();
+      const { data } = await supabase.from('leaderboard').select('*').eq('wallet_address', address).eq('mode', mode).single();
       await supabase.from('leaderboard').upsert({
         wallet_address: address,
+        mode,
         player_name: name,
         score: Math.max(data?.score || 0, score),
         zone_clears: (data?.zone_clears || 0) + clearIncrement,
         updated_at: new Date().toISOString(),
-      });
+      }, { onConflict: 'wallet_address,mode' });
       return;
     }
     const list: LeaderboardEntry[] = JSON.parse(localStorage.getItem(LEADERBOARD_KEY) || '[]');
-    const index = list.findIndex(e => e.wallet_address.toLowerCase() === address);
+    const index = list.findIndex(e => e.wallet_address.toLowerCase() === address && (e.mode ?? 'single') === mode);
     if (index >= 0) {
       list[index].score      = Math.max(list[index].score, score);
       list[index].zone_clears += clearIncrement;
       list[index].player_name = name;
     } else {
-      list.push({ wallet_address: address, player_name: name, zone_clears: clearIncrement, score });
+      list.push({ wallet_address: address, mode, player_name: name, zone_clears: clearIncrement, score });
     }
     localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(list));
   },

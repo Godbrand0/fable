@@ -1,22 +1,24 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
 import {
-  Sword, Backpack, User, BookOpen, Award, Heart, Flame,
+  Sword, Backpack, User, BookOpen, Award, Heart, Flame, Users, Medal,
   RefreshCw, Gem, Play, Settings as SettingsIcon, X, CheckCircle2,
 } from 'lucide-react';
 import TavernShop, { TAVERN_WEAPONS } from './TavernShop';
 import BankModal from './BankModal';
 import GuidedTour, { TOUR_STEPS } from './GuidedTour';
 import NFTDetailModal from './NFTDetailModal';
-import { dbService } from '../lib/supabaseClient';
+import StarterWeaponModal from './StarterWeaponModal';
+import MultiplayerLobby from './multiplayer/MultiplayerLobby';
+import { dbService, LeaderboardEntry } from '../lib/supabaseClient';
 import { celoService } from '../lib/celo';
 import { audioManager } from '../lib/audio';
 import gameBridge from '../game/systems/GameBridge';
 import { GD_ITEMS } from '../lib/nft';
 
-type Section = 'nav' | 'tavern' | 'bank' | 'marketplace' | 'stats' | 'profile' | 'codex' | 'loadout' | 'settings';
+type Section = 'nav' | 'tavern' | 'bank' | 'marketplace' | 'multiplayer' | 'leaderboard' | 'stats' | 'profile' | 'codex' | 'loadout' | 'settings';
 
 interface MenuPageProps {
   playerData: any;
@@ -35,6 +37,8 @@ const NAV_ITEMS: { id: Section; label: string; icon: React.ReactNode }[] = [
   { id: 'tavern',      label: 'Tavern',        icon: <span>🍺</span> },
   { id: 'bank',        label: 'Bank',          icon: <span>🏦</span> },
   { id: 'marketplace', label: 'Marketplace',   icon: <span>🛒</span> },
+  { id: 'multiplayer', label: 'Multiplayer',   icon: <Users size={14} /> },
+  { id: 'leaderboard', label: 'Leaderboard',   icon: <Medal size={14} /> },
   { id: 'stats',       label: 'Stats',         icon: <User size={14} /> },
   { id: 'profile',     label: 'Profile',       icon: <User size={14} /> },
   { id: 'codex',       label: 'Codex / Map',   icon: <BookOpen size={14} /> },
@@ -84,6 +88,10 @@ export default function MenuPage({
   const [sfxOn, setSfxOn]             = useState(true);
   const [message, setMessage]         = useState<string | null>(null);
   const [selectedNft, setSelectedNft] = useState<any | null>(null);
+  const [showStarterWeapon, setShowStarterWeapon] = useState(false);
+  const [leaderboardMode, setLeaderboardMode] = useState<'single' | 'multiplayer'>('single');
+  const [leaderboards, setLeaderboards] = useState<Record<'single' | 'multiplayer', LeaderboardEntry[] | null>>({ single: null, multiplayer: null });
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
 
   const showFlashMessage = (msg: string) => {
     setMessage(msg);
@@ -91,6 +99,16 @@ export default function MenuPage({
   };
 
   const hasProgress = (playerData.level > 1) || ((playerData.maxUnlockedZone || 1) > 1);
+
+  // Lazily fetch each mode's leaderboard the first time its tab is opened.
+  useEffect(() => {
+    if (section !== 'leaderboard' || leaderboards[leaderboardMode] !== null) return;
+    setLeaderboardLoading(true);
+    dbService.getLeaderboard(leaderboardMode)
+      .then(entries => setLeaderboards(prev => ({ ...prev, [leaderboardMode]: entries })))
+      .catch(err => console.error('getLeaderboard failed:', err))
+      .finally(() => setLeaderboardLoading(false));
+  }, [section, leaderboardMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const finishOnboarding = () => {
     setPlayerData((prev: any) => {
@@ -247,6 +265,10 @@ export default function MenuPage({
         <NFTDetailModal nft={selectedNft} onClose={() => setSelectedNft(null)} />
       )}
 
+      {showStarterWeapon && (
+        <StarterWeaponModal onClose={() => setShowStarterWeapon(false)} />
+      )}
+
       {/* Header */}
           <div className="w-full px-4 py-2 flex items-center justify-between border-b border-zinc-800 bg-zinc-900/60 shrink-0">
             <div className="flex items-baseline gap-2">
@@ -357,6 +379,106 @@ export default function MenuPage({
                 </div>
               )}
 
+              {/* MULTIPLAYER */}
+              {section === 'multiplayer' && (
+                <MultiplayerLobby
+                  playerData={playerData}
+                  setPlayerData={setPlayerData}
+                  walletAddress={walletAddress}
+                  walletConnected={walletConnected}
+                  connectWallet={connectWallet}
+                  gDollarBalance={gDollarBalance}
+                  refreshBalance={refreshBalance}
+                  showMessage={showFlashMessage}
+                />
+              )}
+
+              {/* LEADERBOARD */}
+              {section === 'leaderboard' && (() => {
+                const myAddr = (walletAddress || playerData?.wallet_address || '').toLowerCase();
+                const medal = (rank: number) => rank === 0 ? '🥇' : rank === 1 ? '🥈' : rank === 2 ? '🥉' : null;
+                const leaderboard = leaderboards[leaderboardMode];
+                return (
+                  <div className="flex flex-col gap-4 w-full max-w-lg mx-auto">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
+                        <Award size={12} /> Top Adventurers
+                      </span>
+                      <button
+                        onClick={() => {
+                          setLeaderboardLoading(true);
+                          dbService.getLeaderboard(leaderboardMode)
+                            .then(entries => setLeaderboards(prev => ({ ...prev, [leaderboardMode]: entries })))
+                            .catch(err => console.error('getLeaderboard failed:', err))
+                            .finally(() => setLeaderboardLoading(false));
+                        }}
+                        disabled={leaderboardLoading}
+                        className="text-zinc-500 hover:text-white disabled:opacity-40"
+                      >
+                        <RefreshCw size={12} className={leaderboardLoading ? 'animate-spin' : ''} />
+                      </button>
+                    </div>
+
+                    <div className="flex gap-2">
+                      {(['single', 'multiplayer'] as const).map(m => (
+                        <button
+                          key={m}
+                          onClick={() => setLeaderboardMode(m)}
+                          className={`flex-1 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                            leaderboardMode === m
+                              ? 'bg-purple-900/50 border border-purple-700 text-purple-200'
+                              : 'bg-zinc-900 border border-zinc-800 text-zinc-500 hover:text-zinc-300'
+                          }`}
+                        >
+                          {m === 'single' ? 'Single Player' : 'Multiplayer'}
+                        </button>
+                      ))}
+                    </div>
+
+                    {leaderboardLoading && !leaderboard ? (
+                      <div className="text-center text-xs text-zinc-500 py-8">Loading leaderboard…</div>
+                    ) : leaderboard && leaderboard.length > 0 ? (
+                      <div className="flex flex-col gap-1.5">
+                        {leaderboard.map((entry, i) => {
+                          const isMe = entry.wallet_address.toLowerCase() === myAddr;
+                          return (
+                            <div
+                              key={entry.wallet_address}
+                              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border ${
+                                isMe ? 'bg-purple-950/40 border-purple-700' : 'bg-zinc-900/60 border-zinc-800'
+                              }`}
+                            >
+                              <span className="w-6 text-center text-sm font-extrabold text-zinc-400">
+                                {medal(i) ?? `#${i + 1}`}
+                              </span>
+                              <div className="flex flex-col min-w-0 flex-1">
+                                <span className="text-xs font-bold text-zinc-200 truncate flex items-center gap-1.5">
+                                  {entry.player_name}
+                                  {isMe && <span className="text-purple-400 font-extrabold">(You)</span>}
+                                </span>
+                                <span className="text-[9px] text-zinc-500">{entry.zone_clears} zone{entry.zone_clears === 1 ? '' : 's'} cleared</span>
+                              </div>
+                              <span className="text-sm font-extrabold text-yellow-400">{entry.score.toLocaleString()}</span>
+                            </div>
+                          );
+                        })}
+                        {leaderboard.length < 10 && Array.from({ length: 10 - leaderboard.length }, (_, i) => (
+                          <div key={`empty-${i}`} className="flex items-center gap-3 px-3 py-2.5 rounded-xl border border-dashed border-zinc-800 text-zinc-700">
+                            <span className="w-6 text-center text-sm font-extrabold">#{leaderboard.length + i + 1}</span>
+                            <span className="text-xs italic">Open slot</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center gap-2 text-center text-zinc-500 py-8">
+                        <span className="text-3xl">🏆</span>
+                        <span className="text-xs">No scores submitted yet. Be the first!</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* SETTINGS */}
               {section === 'settings' && (
                 <div className="flex flex-col gap-3 max-w-sm">
@@ -456,14 +578,21 @@ export default function MenuPage({
                         const isEquipped = playerData.equippedWeapon === weaponId;
                         const ownedNft = playerData.nftItems?.find((n: any) => n.itemId === weaponId);
                         const isNFT = !!ownedNft;
+                        const isStarterWeapon = weaponId === 'bamboo_stick';
+                        const canView = isNFT || isStarterWeapon;
                         return (
                           <div key={weaponId} className="flex flex-col gap-1.5 bg-black/40 border border-zinc-800/80 rounded-xl p-2.5">
                             <div
-                              className={`relative w-full aspect-square rounded-lg overflow-hidden bg-zinc-950 ${isNFT ? 'cursor-pointer' : ''}`}
-                              onClick={() => isNFT && setSelectedNft(ownedNft)}
+                              className={`relative w-full aspect-square rounded-lg overflow-hidden bg-zinc-950 ${canView ? 'cursor-pointer' : ''}`}
+                              onClick={() => {
+                                if (isNFT) setSelectedNft(ownedNft);
+                                else if (isStarterWeapon) setShowStarterWeapon(true);
+                              }}
                             >
                               {isNFT ? (
                                 <Image src={`/nft/${weaponId}.png`} alt={details.name} fill className="object-cover" />
+                              ) : isStarterWeapon ? (
+                                <Image src="/nft/bamboo_stick.svg" alt={details.name} fill className="object-cover" />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center">
                                   <Sword size={28} className="text-zinc-600" />

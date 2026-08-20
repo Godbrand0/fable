@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import gameBridge from '../game/systems/GameBridge';
-import { Heart, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { Heart, ArrowRight, CheckCircle2, Trophy, Loader2 } from 'lucide-react';
 import { ZONE_LEVEL_REWARDS } from '../lib/nft';
 
 const ZONE_PROGRESSION: Record<string, string> = {
@@ -35,11 +35,55 @@ interface Props {
 export default function LevelClearScreen({ clearedZone, playerData, setPlayerData, walletAddress, onContinue }: Props) {
   const [selected, setSelected]     = useState<string | null>(null);
   const [justBought, setJustBought] = useState<string | null>(null);
+  const [runResult, setRunResult]   = useState<{ score: number; kills: number } | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted]   = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const nextScene    = ZONE_PROGRESSION[clearedZone];
   const nextZoneName = nextScene ? ZONE_NAMES[nextScene] : '';
   const isFinalZone  = clearedZone === 'ObsidianPeakScene';
   const zoneReward   = ZONE_LEVEL_REWARDS[clearedZone] ?? 0;
+
+  // CombatScene emits { zone, score, kills } on 'zone_cleared' right before this
+  // screen mounts — replay=true picks up that same event even though we subscribe
+  // after it already fired.
+  useEffect(() => {
+    return gameBridge.on('zone_cleared', (data: any) => {
+      if (data?.zone !== clearedZone) return;
+      setRunResult({ score: data?.score ?? 0, kills: data?.kills ?? 0 });
+    }, true);
+  }, [clearedZone]);
+
+  const submitScore = async () => {
+    if (submitting || submitted || !runResult) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const addr = walletAddress || playerData?.wallet_address;
+      if (!addr) throw new Error('No wallet connected');
+
+      const res = await fetch('/api/submit-score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          walletAddress: addr,
+          name: playerData.name,
+          mode: 'single',
+          zone: clearedZone,
+          score: runResult.score,
+          clearIncrement: 1,
+        }),
+      });
+      if (!res.ok) throw new Error('Score submission failed');
+      setSubmitted(true);
+    } catch (err) {
+      console.error('submitScore failed:', err);
+      setSubmitError('Could not submit your score. Try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   // Add reward to pending
   useEffect(() => {
@@ -80,7 +124,7 @@ export default function LevelClearScreen({ clearedZone, playerData, setPlayerDat
 
   return (
     <div className="absolute inset-0 z-50 bg-black/92 flex flex-col items-center justify-center font-mono pointer-events-auto">
-      <div className="w-full max-w-sm flex flex-col gap-4 px-6">
+      <div className="w-full max-w-sm max-h-full overflow-y-auto flex flex-col gap-4 px-6 py-6">
 
         {/* Header */}
         <div className="text-center flex flex-col gap-1">
@@ -99,6 +143,31 @@ export default function LevelClearScreen({ clearedZone, playerData, setPlayerDat
               <p className="text-[12px] font-extrabold text-emerald-400">+{zoneReward.toLocaleString()} G$ added to Bank!</p>
               <p className="text-[10px] text-zinc-400">Visit the Bank page to claim.</p>
             </div>
+          </div>
+        )}
+
+        {/* Leaderboard score submission */}
+        {runResult && (
+          <div className="rounded-xl border-2 border-purple-700/60 bg-purple-950/25 px-4 py-3 flex items-center gap-3">
+            <Trophy size={20} className="text-yellow-400 shrink-0" />
+            <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+              <p className="text-[12px] font-extrabold text-purple-200">
+                {runResult.score.toLocaleString()} pts &middot; {runResult.kills} kills
+              </p>
+              {submitError && <p className="text-[10px] text-red-400">{submitError}</p>}
+            </div>
+            {submitted ? (
+              <span className="text-[10px] font-bold text-emerald-400 shrink-0">✓ Submitted</span>
+            ) : (
+              <button
+                onClick={submitScore}
+                disabled={submitting}
+                className="shrink-0 flex items-center gap-1.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-[10px] font-bold px-3 py-2 rounded-lg"
+              >
+                {submitting ? <Loader2 size={11} className="animate-spin" /> : null}
+                Submit Score
+              </button>
+            )}
           </div>
         )}
 

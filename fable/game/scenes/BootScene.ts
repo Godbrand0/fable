@@ -471,6 +471,196 @@ export default class BootScene extends Phaser.Scene {
       g.fillRect(28, 38, 24, 3);
     });
 
+    // ─── VOID IMP (24×32) ─── Co-op arena enemy — bright lavender raider, deliberately
+    // lighter than the near-black rift ground/chasm tiles so it reads clearly at a
+    // glance on mobile screens, unlike the darker original palette ───
+    draw('void_imp', 24, 32, (g) => {
+      // Wings (lavender, wispy)
+      g.fillStyle(0x5A2AA0);
+      g.fillTriangle(0, 6, 6, 2, 6, 18);
+      g.fillTriangle(24, 6, 18, 2, 18, 18);
+      g.fillStyle(0x8A5CD0);
+      g.fillTriangle(0, 8, 5, 4, 5, 16);
+      g.fillTriangle(24, 8, 19, 4, 19, 16);
+
+      // Body
+      g.fillStyle(0x9B5CFF);
+      g.fillRect(5, 8, 14, 18);
+      g.fillStyle(0xC79BFF);
+      g.fillRect(7, 10, 10, 10);
+
+      // Head
+      g.fillStyle(0x9B5CFF);
+      g.fillRect(6, 2, 12, 10);
+
+      // Horns
+      g.fillStyle(0x2A1050);
+      g.fillRect(6, 0, 3, 3);
+      g.fillRect(15, 0, 3, 3);
+
+      // Glowing eyes (warm accent against the cool body for extra pop)
+      g.fillStyle(0xFFCC44);
+      g.fillRect(8, 5, 3, 3);
+      g.fillRect(13, 5, 3, 3);
+      g.fillStyle(0xFFEEAA);
+      g.fillRect(9, 6, 1, 1);
+      g.fillRect(14, 6, 1, 1);
+
+      // Legs
+      g.fillStyle(0x7A3ED0);
+      g.fillRect(6, 26, 5, 6);
+      g.fillRect(13, 26, 5, 6);
+
+      // Claws
+      g.fillStyle(0x222222);
+      g.fillRect(5, 31, 3, 1);
+      g.fillRect(13, 31, 3, 1);
+    });
+
+    // ─── VOID TITAN BOSS (96×96) ─── Co-op arena boss — colossal rift guardian that returns
+    // across multiple lives before its core finally shatters ───
+    draw('void_titan', 96, 96, (g) => {
+      // Outer aura
+      g.fillStyle(0x2A0A55, 0.5);
+      g.fillCircle(48, 48, 46);
+      g.fillStyle(0x3A1470, 0.4);
+      g.fillCircle(48, 48, 38);
+
+      // Armored body
+      g.fillStyle(0x160830);
+      g.fillRect(20, 20, 56, 64);
+      g.fillStyle(0x241048);
+      g.fillRect(26, 26, 44, 52);
+
+      // Chest core (pulses via tint at runtime)
+      g.fillStyle(0x9B4DFF);
+      g.fillCircle(48, 52, 12);
+      g.fillStyle(0xD9B3FF);
+      g.fillCircle(48, 52, 5);
+
+      // Shoulders
+      g.fillStyle(0x100620);
+      g.fillRect(6, 22, 18, 22);
+      g.fillRect(72, 22, 18, 22);
+
+      // Horned crown
+      g.fillStyle(0x160830);
+      g.fillTriangle(30, 20, 22, 0, 40, 20);
+      g.fillTriangle(66, 20, 74, 0, 56, 20);
+      g.fillTriangle(48, 16, 40, -4, 56, -4);
+
+      // Eyes
+      g.fillStyle(0xFF66FF);
+      g.fillRect(34, 30, 8, 6);
+      g.fillRect(54, 30, 8, 6);
+      g.fillStyle(0xFFE0FF);
+      g.fillRect(36, 31, 3, 3);
+      g.fillRect(56, 31, 3, 3);
+
+      // Legs
+      g.fillStyle(0x100620);
+      g.fillRect(26, 78, 16, 16);
+      g.fillRect(54, 78, 16, 16);
+    });
+
+    // ─── VOID RIFT GROUND (32×32) ─── Co-op arena tile — cracked dark stone with violet energy veins ───
+    draw('tile_void', 32, 32, (g) => {
+      g.fillStyle(0x0B0714);
+      g.fillRect(0, 0, 32, 32);
+      g.fillStyle(0x140C24);
+      g.fillRect(2, 2, 28, 28);
+      // Cracks
+      g.fillStyle(0x08050F);
+      g.fillRect(4, 14, 20, 1);
+      g.fillRect(14, 4, 1, 22);
+      g.fillRect(20, 18, 8, 1);
+      // Violet energy veins
+      g.fillStyle(0x8A3AE0);
+      g.fillRect(5, 14, 10, 1);
+      g.fillRect(14, 6, 1, 8);
+      g.fillStyle(0xB878FF);
+      g.fillRect(6, 14, 4, 1);
+      g.fillRect(14, 7, 1, 3);
+    });
+
+    // ─── RIFT CRYSTAL (20×48) ─── Co-op arena decoration — jagged violet crystal spike ───
+    draw('rift_crystal', 20, 48, (g) => {
+      // Dark base shard
+      g.fillStyle(0x2A1050);
+      g.fillTriangle(10, 0, 2, 40, 18, 40);
+      // Mid facet
+      g.fillStyle(0x5A2AA0);
+      g.fillTriangle(10, 6, 5, 38, 13, 38);
+      // Bright inner glow edge
+      g.fillStyle(0x9B5CFF);
+      g.fillTriangle(10, 10, 8, 36, 12, 36);
+      g.fillStyle(0xD9B3FF);
+      g.fillRect(9, 14, 2, 18);
+      // Ground shadow/base rocks
+      g.fillStyle(0x1A0A34);
+      g.fillEllipse(10, 42, 16, 8);
+      g.fillStyle(0x2A1050);
+      g.fillEllipse(10, 40, 12, 5);
+    });
+
+    // ─── RIFT SHARD (10×14) ─── Small scattered glowing debris for the co-op arena ───
+    draw('rift_shard', 10, 14, (g) => {
+      g.fillStyle(0x3A1870);
+      g.fillTriangle(5, 0, 0, 12, 10, 12);
+      g.fillStyle(0xB878FF);
+      g.fillTriangle(5, 3, 3, 11, 7, 11);
+      g.fillStyle(0xEEDDFF);
+      g.fillRect(4, 5, 2, 5);
+    });
+
+    // ─── VOID CHASM (32×32) ─── Co-op arena barrier — impassable crack spilling raw
+    // rift energy, the arena's equivalent of Ember Fields' lava river tile ───
+    draw('tile_void_chasm', 32, 32, (g) => {
+      g.fillStyle(0x05030A);
+      g.fillRect(0, 0, 32, 32);
+      // Energy bands
+      g.fillStyle(0x6A1FBE);
+      g.fillRect(0, 4, 32, 6);
+      g.fillRect(0, 16, 32, 8);
+      // Bright hot spots
+      g.fillStyle(0x9B4DFF);
+      g.fillRect(4, 5, 8, 4);
+      g.fillRect(18, 18, 10, 4);
+      g.fillStyle(0xE8CCFF);
+      g.fillRect(6, 6, 4, 2);
+      g.fillRect(22, 20, 4, 2);
+      // Dark cooling crust edges
+      g.fillStyle(0x150730);
+      g.fillRect(0, 0, 32, 3);
+      g.fillRect(0, 29, 32, 3);
+    });
+
+    // ─── VOID CHASM BORDER (32×32) ─── Cracked edge tile bordering the chasm ───
+    draw('tile_void_chasm_border', 32, 32, (g) => {
+      g.fillStyle(0x1C0E3A);
+      g.fillRect(0, 0, 32, 32);
+      g.fillStyle(0x8A3AE0);
+      g.fillRect(4, 0, 2, 14);
+      g.fillRect(14, 6, 2, 26);
+      g.fillRect(22, 0, 1, 18);
+      g.fillRect(28, 10, 2, 22);
+      g.fillRect(0, 20, 10, 2);
+      g.fillRect(18, 26, 14, 2);
+      g.fillStyle(0xB878FF);
+      g.fillRect(5, 2, 1, 10);
+      g.fillRect(15, 8, 1, 20);
+    });
+
+    // ─── VOID GLOW (64×64) ─── Pulsing rift-energy pool, decoration near the chasm ───
+    draw('void_glow', 64, 64, (g) => {
+      g.fillStyle(0x9B4DFF, 0.3);
+      g.fillCircle(32, 32, 30);
+      g.fillStyle(0xB878FF, 0.2);
+      g.fillCircle(32, 32, 22);
+      g.fillStyle(0xE8CCFF, 0.1);
+      g.fillCircle(32, 32, 14);
+    });
+
     // ─── CHICKEN (16×14) ───
     draw('chicken', 16, 14, (g) => {
       g.fillStyle(0xEEEEEE);
