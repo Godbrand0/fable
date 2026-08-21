@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { NftItem } from './nft';
 import type { LeaderboardMode } from './scoreLedger';
+import { DEFAULT_SKIN } from './skins';
 
 const supabaseUrl     = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -15,6 +16,7 @@ export interface PlayerData {
   wallet_address: string;
   name: string;
   class: string;
+  skin: string;                // character skin id (see lib/skins.ts) — chosen once at creation
   level: number;
   xp: number;
   gold: number;
@@ -62,6 +64,7 @@ function withDefaults(p: any): PlayerData {
     wallet_address:   p.wallet_address   ?? 'local_player',
     name:             p.name             ?? 'Hero',
     class:            p.hero_class       ?? p.class        ?? 'knight',
+    skin:             p.skin             ?? DEFAULT_SKIN,
     level:            p.level            ?? 1,
     xp:               p.xp               ?? 0,
     gold:             p.gold             ?? 100,
@@ -92,6 +95,7 @@ function toDbRow(player: PlayerData) {
     wallet_address:   player.wallet_address,
     name:             player.name,
     hero_class:       player.class,
+    skin:             player.skin ?? DEFAULT_SKIN,
     level:            player.level,
     xp:               player.xp,
     gold:             player.gold,

@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS public.players (
     wallet_address      TEXT        PRIMARY KEY,
     name                TEXT        NOT NULL DEFAULT 'Hero',
     hero_class          TEXT        NOT NULL DEFAULT 'knight',
+    -- Character skin — chosen once at onboarding (see lib/skins.ts for valid ids)
+    skin                TEXT        NOT NULL DEFAULT 'human',
 
     -- Core stats
     level               INTEGER     NOT NULL DEFAULT 1,
@@ -73,7 +75,8 @@ ALTER TABLE public.players
     ADD COLUMN IF NOT EXISTS pendingrewards TEXT[] NOT NULL DEFAULT '{}',
     ADD COLUMN IF NOT EXISTS onboarded      BOOLEAN NOT NULL DEFAULT false,
     ADD COLUMN IF NOT EXISTS zone_progress  JSONB NOT NULL DEFAULT '{}'::jsonb,
-    ADD COLUMN IF NOT EXISTS current_zone   TEXT DEFAULT NULL;
+    ADD COLUMN IF NOT EXISTS current_zone   TEXT DEFAULT NULL,
+    ADD COLUMN IF NOT EXISTS skin           TEXT NOT NULL DEFAULT 'human';
 
 -- Back-fill existing players so they don't see the new-player tutorial retroactively
 UPDATE public.players SET onboarded = true WHERE level > 1 OR maxunlockedzone > 1;

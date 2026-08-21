@@ -17,6 +17,7 @@ import { celoService } from '../lib/celo';
 import { audioManager } from '../lib/audio';
 import gameBridge from '../game/systems/GameBridge';
 import { GD_ITEMS } from '../lib/nft';
+import { getPlayerTextureKey } from '../lib/combatFormulas';
 
 type Section = 'nav' | 'tavern' | 'bank' | 'marketplace' | 'multiplayer' | 'leaderboard' | 'stats' | 'profile' | 'codex' | 'loadout' | 'settings';
 
@@ -175,8 +176,7 @@ export default function MenuPage({
     setPlayerData((prev: any) => {
       const updated = { ...prev, equippedWeapon: weaponId };
       dbService.savePlayer(updated);
-      const wDef = TAVERN_WEAPONS.find(w => w.id === weaponId);
-      if (wDef?.textureKey) gameBridge.emit('weapon_changed', { textureKey: wDef.textureKey });
+      gameBridge.emit('weapon_changed', { textureKey: getPlayerTextureKey(prev.skin, weaponId) });
       return updated;
     });
   };

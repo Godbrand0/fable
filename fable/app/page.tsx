@@ -8,7 +8,9 @@ import { celoService } from '../lib/celo';
 import { audioManager } from '../lib/audio';
 import HUD from '../components/HUD';
 import MenuPage from '../components/MenuPage';
+import SkinPicker from '../components/SkinPicker';
 import gameBridge from '../game/systems/GameBridge';
+import { DEFAULT_SKIN } from '../lib/skins';
 import { Wallet2, User, Loader2, AlertTriangle } from 'lucide-react';
 
 const GameContainer = dynamic(() => import('../components/GameContainer'), {
@@ -42,6 +44,7 @@ export default function Home() {
 
   // Character creation state
   const [charName, setCharName]     = useState('');
+  const [selectedSkin, setSelectedSkin] = useState(DEFAULT_SKIN);
   const [creating, setCreating]     = useState(false);
 
   // In-game pause menu (overlays GameContainer + HUD without unmounting them)
@@ -169,6 +172,7 @@ export default function Home() {
       wallet_address:  walletAddress,
       name:            charName.trim(),
       class:           'knight',
+      skin:            selectedSkin,
       level:           1,
       xp:              0,
       gold:            100,
@@ -385,6 +389,8 @@ export default function Home() {
                 required
               />
             </div>
+
+            <SkinPicker selected={selectedSkin} onSelect={setSelectedSkin} />
 
             <button
               type="submit"

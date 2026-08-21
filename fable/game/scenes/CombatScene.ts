@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import gameBridge from '../systems/GameBridge';
 import { audioManager } from '../../lib/audio';
-import { computePlayerDamage, computeShootCooldown, getWeaponCombatStats } from '../../lib/combatFormulas';
+import { computePlayerDamage, computeShootCooldown, getWeaponCombatStats, getPlayerTextureKey } from '../../lib/combatFormulas';
+import { DEFAULT_SKIN } from '../../lib/skins';
 import RemotePartyMember from '../systems/RemotePartyMember';
 
 export interface EnemyConfig {
@@ -47,6 +48,7 @@ export default abstract class CombatScene extends Phaser.Scene {
   private shieldActive = false;
   private shieldCircle: Phaser.GameObjects.Arc | null = null;
   protected equippedWeaponAtk = 5;
+  private playerSkin: string = DEFAULT_SKIN;
 
   // Keyboard
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -154,8 +156,9 @@ export default abstract class CombatScene extends Phaser.Scene {
         this.playerDefense = def;
         this.shootCooldown = computeShootCooldown(agi);
         this.activeAbility = data.activeAbility ?? null;
-        // Apply equipped weapon texture on load
-        if (this.player?.active) this.player.setTexture(weapon.textureKey);
+        this.playerSkin = data.skin || DEFAULT_SKIN;
+        // Apply equipped skin + weapon texture on load
+        if (this.player?.active) this.player.setTexture(getPlayerTextureKey(this.playerSkin, data.equippedWeapon ?? 'bamboo_stick'));
 
         // Seed mid-zone kill/score progress once, from the player's last save
         if (!this.zoneProgressSeeded) {
@@ -246,7 +249,7 @@ export default abstract class CombatScene extends Phaser.Scene {
       if (!this.isMultiplayer || !data) return;
       const existing = this.remoteMembers.get(wallet);
       if (existing) { existing.updateGear(data.equippedWeapon); return; }
-      const rm = new RemotePartyMember(this, wallet, data.name ?? 'Ally', data.equippedWeapon ?? 'bamboo_stick', this.player.x, this.player.y);
+      const rm = new RemotePartyMember(this, wallet, data.name ?? 'Ally', data.skin || DEFAULT_SKIN, data.equippedWeapon ?? 'bamboo_stick', this.player.x, this.player.y);
       this.remoteMembers.set(wallet, rm);
     });
     const unsubRemotePos = gameBridge.on('mp_in_pos', (payload: any) => {
