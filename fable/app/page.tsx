@@ -358,9 +358,20 @@ export default function Home() {
 
   // ── CHARACTER CREATION (wallet connected, no profile yet) ───────────────────
   if (phase === 'creating') {
+    // h-screen + overflow-y-auto (not min-h-screen) so THIS div is the scroll
+    // container — body itself is locked to overflow:hidden for the game's
+    // full-screen mobile view (see globals.css), so short viewports (landscape
+    // phones) would otherwise clip the name/wallet/skin-picker content with no
+    // way to reach it. my-auto on the card (not justify-center on this flex
+    // container) keeps it vertically centered on tall screens while staying
+    // fully scrollable on short ones — justify-center + overflow-y-auto clips
+    // unreachably in some mobile browsers when content overflows.
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-[#0a0a0a] px-4 py-8 font-mono text-zinc-200">
-        <div className="w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-2xl p-6 shadow-2xl flex flex-col gap-6">
+      <div
+        className="flex flex-col items-center h-screen w-full overflow-y-auto overscroll-contain bg-[#0a0a0a] px-4 py-8 font-mono text-zinc-200"
+        style={{ touchAction: 'pan-y' }}
+      >
+        <div className="w-full max-w-md my-auto bg-zinc-950 border border-zinc-800 rounded-2xl p-6 shadow-2xl flex flex-col gap-6">
 
           <div className="text-center flex flex-col items-center gap-1">
             <h1 className="text-2xl font-extrabold text-transparent bg-clip-text bg-linear-to-r from-yellow-500 to-amber-600 tracking-wider uppercase">
