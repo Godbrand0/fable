@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import TavernShop, { TAVERN_WEAPONS } from './TavernShop';
 import BankModal from './BankModal';
+import Marketplace from './Marketplace';
 import GuidedTour, { TOUR_STEPS } from './GuidedTour';
 import NFTDetailModal from './NFTDetailModal';
 import StarterWeaponModal from './StarterWeaponModal';
@@ -333,7 +334,7 @@ export default function MenuPage({
 
             {/* Content pane — `relative` so Tavern/Bank's `absolute inset-0` fills
                 just this pane instead of the whole screen */}
-            <div className={`flex-1 overflow-y-auto relative ${section === 'tavern' || section === 'bank' ? '' : 'p-6'}`}>
+            <div className={`flex-1 overflow-y-auto relative ${section === 'tavern' || section === 'bank' || section === 'marketplace' ? '' : 'p-6'}`}>
               {section === 'nav' && (
                 <div className="flex flex-col items-center justify-center h-full text-center gap-3 text-zinc-500">
                   <span className="text-4xl">🗡️</span>
@@ -353,6 +354,7 @@ export default function MenuPage({
                   refreshBalance={refreshBalance}
                   onLeave={() => setSection('nav')}
                   showMessage={showFlashMessage}
+                  onNeedsVerification={() => setSection('bank')}
                 />
               )}
 
@@ -372,11 +374,18 @@ export default function MenuPage({
 
               {/* MARKETPLACE */}
               {section === 'marketplace' && (
-                <div className="flex flex-col items-center justify-center h-full text-center gap-3 text-zinc-500">
-                  <span className="text-4xl">🛒</span>
-                  <span className="text-sm font-bold text-zinc-300">Marketplace</span>
-                  <p className="text-xs max-w-xs">Player-to-player trading is coming soon.</p>
-                </div>
+                <Marketplace
+                  playerData={playerData}
+                  setPlayerData={setPlayerData}
+                  walletAddress={walletAddress}
+                  walletConnected={walletConnected}
+                  connectWallet={connectWallet}
+                  gDollarBalance={gDollarBalance}
+                  refreshBalance={refreshBalance}
+                  onLeave={() => setSection('nav')}
+                  showMessage={showFlashMessage}
+                  onNeedsVerification={() => setSection('bank')}
+                />
               )}
 
               {/* MULTIPLAYER */}

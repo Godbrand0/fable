@@ -214,6 +214,15 @@ export const dbService = {
     return found ? withDefaults(found as any) : null;
   },
 
+  // wallet (lowercase) → player name, for display next to on-chain addresses. Missing wallets are omitted.
+  async getPlayerNames(walletAddresses: string[]): Promise<Record<string, string>> {
+    const addrs = Array.from(new Set(walletAddresses.map(a => a.toLowerCase())));
+    if (!supabase || addrs.length === 0) return {};
+    const { data, error } = await supabase.from('players').select('wallet_address, name').in('wallet_address', addrs);
+    if (error || !data) return {};
+    return Object.fromEntries(data.map((r: any) => [r.wallet_address, r.name]));
+  },
+
   async getLeaderboard(mode: LeaderboardMode = 'single'): Promise<LeaderboardEntry[]> {
     if (supabase) {
       const { data, error } = await supabase.from('leaderboard').select('*').eq('mode', mode).order('score', { ascending: false }).limit(10);

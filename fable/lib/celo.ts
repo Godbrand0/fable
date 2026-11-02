@@ -1,6 +1,7 @@
-import { createPublicClient, createWalletClient, custom, http, parseAbi, encodeAbiParameters, parseAbiParameters, parseUnits, WalletClient } from 'viem';
+import { createPublicClient, createWalletClient, custom, http, parseAbi, encodeAbiParameters, parseAbiParameters, parseUnits, formatUnits, WalletClient } from 'viem';
 import { celo } from 'viem/chains';
 import { FABLE_ITEMS_ADDRESS, FABLE_ITEMS_ABI, NftItem } from './nft';
+import { FABLE_MARKETPLACE_ADDRESS, FABLE_MARKETPLACE_ABI, MarketListing } from './marketplace';
 import { getWeb3AuthProvider } from './web3auth';
 
 const CELO_RPC = process.env.NEXT_PUBLIC_CELO_RPC_URL || 'https://forno.celo.org';
@@ -126,7 +127,7 @@ export const celoService = {
 
   async getEntitlement(address: string): Promise<string> {
     if (!address.startsWith('0x')) return '0.00';
-    if (!this.hasInjectedProvider()) {
+    if (!this.getWalletClient()) {
       const lastClaim = localStorage.getItem(`fable_last_claim_${address.toLowerCase()}`);
       return lastClaim === new Date().toDateString() ? '0.00' : '10.00';
     }
@@ -236,7 +237,7 @@ export const celoService = {
     const amountWei = parseUnits(String(gdCost), 18);
     const data = encodeAbiParameters(parseAbiParameters('uint256'), [BigInt(tokenId)]);
 
-    if (!this.hasInjectedProvider()) {
+    if (!this.getWalletClient()) {
       const currentBal = Number(await this.getG$Balance(walletAddress));
       if (currentBal < gdCost) return null;
       localStorage.setItem(`fable_mock_g$_bal_${walletAddress.toLowerCase()}`, (currentBal - gdCost).toFixed(2));
@@ -271,6 +272,186 @@ export const celoService = {
     } catch (err) {
       console.error('buyItem failed:', err);
       return null;
+    }
+  },
+
+  // ── Marketplace ────────────────────────────────────────────────────────────
+  // Real wallet → FableMarketplace contract. No wallet (dev) → localStorage market,
+  // same convention as buyItem/claimUBI above.
+
+  // 'mock' = dev market in localStorage, 'chain' = deployed contract, 'unavailable' = real wallet but no contract address
+  marketMode(): 'mock' | 'chain' | 'unavailable' {
+    if (!this.getWalletClient()) return 'mock';
+    return FABLE_MARKETPLACE_ADDRESS ? 'chain' : 'unavailable';
+  },
+
+  _readMockMarket(): { nextId: number; listings: MarketListing[] } {
+    try {
+      const raw = JSON.parse(localStorage.getItem('fable_mock_market') || 'null');
+      if (raw && Array.isArray(raw.listings)) return raw;
+    } catch { /* fall through */ }
+    return { nextId: 1, listings: [] };
+  },
+
+  // Native CELO balance (gas). Dev mock wallet always reports plenty.
+  async getCeloBalance(address: string): Promise<number> {
+    if (!this.getWalletClient()) return Infinity;
+    try {
+      return Number(formatUnits(await publicClient.getBalance({ address: address as `0x${string}` }), 18));
+    } catch {
+      return 0;
+    }
+  },
+
+  // Marketplace fee in basis points (100 = 1%). Dev mock market has no fee.
+  async getMarketFeeBps(): Promise<number> {
+    if (this.marketMode() !== 'chain') return 0;
+    try {
+      return Number(await publicClient.readContract({
+        address: FABLE_MARKETPLACE_ADDRESS as `0x${string}`, abi: FABLE_MARKETPLACE_ABI, functionName: 'feeBps',
+      }));
+    } catch {
+      return 0;
+    }
+  },
+
+  async getMarketListings(): Promise<MarketListing[]> {
+    const mode = this.marketMode();
+    if (mode === 'unavailable') return [];
+    if (mode === 'mock') return this._readMockMarket().listings;
+
+    const market = FABLE_MARKETPLACE_ADDRESS as `0x${string}`;
+    const next = Number(await publicClient.readContract({ address: market, abi: FABLE_MARKETPLACE_ABI, functionName: 'nextListingId' }));
+    const PAGE = 500;
+    const out: MarketListing[] = [];
+    for (let start = 1; start < next; start += PAGE) {
+      const [ids, rows] = await publicClient.readContract({
+        address: market, abi: FABLE_MARKETPLACE_ABI, functionName: 'getActiveListings',
+        args: [BigInt(start), BigInt(PAGE)],
+      });
+      rows.forEach((r, i) => out.push({
+        id: Number(ids[i]),
+        seller: r.seller.toLowerCase(),
+        tokenId: Number(r.tokenId),
+        price: Number(formatUnits(r.price, 18)),
+      }));
+    }
+    return out;
+  },
+
+  // Escrow an item into the marketplace. Asks for a one-time setApprovalForAll first if needed.
+  async listItem(walletAddress: string, tokenId: number, priceG$: number): Promise<boolean> {
+    const mode = this.marketMode();
+    if (mode === 'unavailable') return false;
+    if (mode === 'mock') {
+      const m = this._readMockMarket();
+      m.listings.push({ id: m.nextId++, seller: walletAddress.toLowerCase(), tokenId, price: priceG$ });
+      localStorage.setItem('fable_mock_market', JSON.stringify(m));
+      return true;
+    }
+
+    try {
+      await this.ensureCeloNetwork();
+      const account = walletAddress as `0x${string}`;
+      const walletClient = this.getWalletClient(account);
+      if (!walletClient) throw new Error('No wallet client available');
+      const market = FABLE_MARKETPLACE_ADDRESS as `0x${string}`;
+
+      const approved = await publicClient.readContract({
+        address: FABLE_ITEMS_ADDRESS, abi: FABLE_ITEMS_ABI, functionName: 'isApprovedForAll', args: [account, market],
+      });
+      if (!approved) {
+        const { request } = await publicClient.simulateContract({
+          account, address: FABLE_ITEMS_ADDRESS, abi: FABLE_ITEMS_ABI, functionName: 'setApprovalForAll', args: [market, true],
+        });
+        const approveHash = await walletClient.writeContract(request);
+        const approveReceipt = await publicClient.waitForTransactionReceipt({ hash: approveHash });
+        if (approveReceipt.status !== 'success') return false;
+      }
+
+      const { request } = await publicClient.simulateContract({
+        account, address: market, abi: FABLE_MARKETPLACE_ABI, functionName: 'list',
+        args: [BigInt(tokenId), parseUnits(String(priceG$), 18)],
+      });
+      const hash = await walletClient.writeContract(request);
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      return receipt.status === 'success';
+    } catch (err) {
+      console.error('listItem failed:', err);
+      return false;
+    }
+  },
+
+  async cancelListing(walletAddress: string, listingId: number): Promise<boolean> {
+    const mode = this.marketMode();
+    if (mode === 'unavailable') return false;
+    if (mode === 'mock') {
+      const m = this._readMockMarket();
+      const idx = m.listings.findIndex(l => l.id === listingId && l.seller === walletAddress.toLowerCase());
+      if (idx < 0) return false;
+      m.listings.splice(idx, 1);
+      localStorage.setItem('fable_mock_market', JSON.stringify(m));
+      return true;
+    }
+
+    try {
+      await this.ensureCeloNetwork();
+      const account = walletAddress as `0x${string}`;
+      const walletClient = this.getWalletClient(account);
+      if (!walletClient) throw new Error('No wallet client available');
+      const { request } = await publicClient.simulateContract({
+        account, address: FABLE_MARKETPLACE_ADDRESS as `0x${string}`, abi: FABLE_MARKETPLACE_ABI,
+        functionName: 'cancel', args: [BigInt(listingId)],
+      });
+      const hash = await walletClient.writeContract(request);
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      return receipt.status === 'success';
+    } catch (err) {
+      console.error('cancelListing failed:', err);
+      return false;
+    }
+  },
+
+  // Buy a listing in one tx: gToken.transferAndCall(marketplace, price, abi.encode(listingId)).
+  async buyListing(walletAddress: string, listing: MarketListing): Promise<boolean> {
+    const mode = this.marketMode();
+    if (mode === 'unavailable') return false;
+    if (mode === 'mock') {
+      const m = this._readMockMarket();
+      const idx = m.listings.findIndex(l => l.id === listing.id);
+      if (idx < 0) return false;
+      const buyerBal = Number(await this.getG$Balance(walletAddress));
+      if (buyerBal < listing.price) return false;
+      localStorage.setItem(`fable_mock_g$_bal_${walletAddress.toLowerCase()}`, (buyerBal - listing.price).toFixed(2));
+      const sellerBal = Number(await this.getG$Balance(listing.seller));
+      localStorage.setItem(`fable_mock_g$_bal_${listing.seller}`, (sellerBal + listing.price).toFixed(2));
+      m.listings.splice(idx, 1);
+      localStorage.setItem('fable_mock_market', JSON.stringify(m));
+      return true;
+    }
+
+    try {
+      await this.ensureCeloNetwork();
+      const account = walletAddress as `0x${string}`;
+      const walletClient = this.getWalletClient(account);
+      if (!walletClient) throw new Error('No wallet client available');
+      const { request } = await publicClient.simulateContract({
+        account,
+        address: G$_ADDRESS,
+        abi: G$_ABI,
+        functionName: 'transferAndCall',
+        args: [
+          FABLE_MARKETPLACE_ADDRESS as `0x${string}`,
+          parseUnits(String(listing.price), 18),
+          encodeAbiParameters(parseAbiParameters('uint256'), [BigInt(listing.id)]),
+        ],
+      });
+      const hash = await walletClient.writeContract(request);
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      return receipt.status === 'success';
+    } catch (err) {
+      console.error('buyListing failed:', err);
+      return false;
     }
   },
 
