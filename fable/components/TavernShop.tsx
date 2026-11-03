@@ -6,6 +6,7 @@ import { celoService } from '../lib/celo';
 import { dbService } from '../lib/supabaseClient';
 import { GD_ITEMS, GOLD_ITEMS, GDollarItemDef, GoldItemDef } from '../lib/nft';
 import gameBridge from '../game/systems/GameBridge';
+import { useVerificationGate } from '../features/verification-gate';
 import { X, Gem } from 'lucide-react';
 
 // Re-export weapon list for HUD loadout panel
@@ -29,6 +30,7 @@ interface TavernShopProps {
   refreshBalance: () => Promise<void>;
   onLeave: () => void;
   showMessage: (msg: string) => void;
+  onNeedsVerification?: () => void;
 }
 
 const GD_COLS = 2;  // weapons col 0, abilities col 1
@@ -40,8 +42,9 @@ export default function TavernShop({
   playerData, setPlayerData,
   walletAddress, walletConnected, connectWallet,
   gDollarBalance, refreshBalance,
-  onLeave, showMessage,
+  onLeave, showMessage, onNeedsVerification,
 }: TavernShopProps) {
+  const { ensureVerified } = useVerificationGate({ walletAddress, connectWallet, showMessage, onNeedsVerification });
   const [tab, setTab]       = useState<ShopTab>('gold');
   const [cursor, setCursor] = useState({ col: 0, row: 0 });
   const [buying, setBuying] = useState(false);
@@ -111,6 +114,7 @@ export default function TavernShop({
 
     setBuying(true);
     try {
+      if (!(await ensureVerified('tavernGold'))) return;
       setPlayerData((prev: any) => {
         let updated = { ...prev, gold: prev.gold - item.goldCost };
         if (item.heal) {
@@ -131,7 +135,7 @@ export default function TavernShop({
     } finally {
       setBuying(false);
     }
-  }, [setPlayerData, showMessage]);
+  }, [ensureVerified, setPlayerData, showMessage]);
 
   // ── G$ purchase (signs tx → mints NFT) ────────────────────────────────────
   const buyGdItem = useCallback(async () => {
@@ -152,6 +156,8 @@ export default function TavernShop({
 
     setBuying(true);
     try {
+      if (!(await ensureVerified('tavernGd'))) return;
+
       // Ensure wallet connected
       let addr = walletAddrRef.current;
       if (!addr) {
@@ -195,7 +201,7 @@ export default function TavernShop({
     } finally {
       setBuying(false);
     }
-  }, [connectWallet, refreshBalance, setPlayerData, showMessage]);
+  }, [connectWallet, ensureVerified, refreshBalance, setPlayerData, showMessage]);
 
   // Dispatch to correct buy fn based on active tab
   const handleBuyRef = useRef<() => void>(() => {});
