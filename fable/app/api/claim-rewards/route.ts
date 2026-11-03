@@ -24,6 +24,7 @@ export async function POST(req: NextRequest) {
         success: true,
         mocked: true,
         zones,
+        settledZones: zones,
         txHash: `mock_reward_batch_${Date.now()}`,
       });
     }
@@ -32,10 +33,12 @@ export async function POST(req: NextRequest) {
     const adminWallet  = createWalletClient({ account: adminAccount, chain: celo, transport: http(RPC) });
 
     let claimedCount = 0;
+    // Zones whose reward is no longer owed: paid just now, already paid on-chain, or not a rewardable zone.
+    const settledZones: string[] = [];
 
     for (const zone of zones) {
       const levelId = ZONE_LEVEL_IDS[zone];
-      if (!levelId) continue;
+      if (!levelId) { settledZones.push(zone); continue; }
 
       const alreadyClaimed = await serverClient.readContract({
         address: FABLE_ITEMS_ADDRESS,
@@ -44,7 +47,7 @@ export async function POST(req: NextRequest) {
         args: [walletAddress as `0x${string}`, BigInt(levelId)],
       });
 
-      if (alreadyClaimed) continue;
+      if (alreadyClaimed) { settledZones.push(zone); continue; }
 
       try {
         const { request } = await serverClient.simulateContract({
@@ -61,6 +64,7 @@ export async function POST(req: NextRequest) {
         const amount = ZONE_LEVEL_REWARDS[zone] ?? 0;
         dbService.recordLevelRewardClaim(walletAddress, levelId, zone, amount, hash).catch(() => {});
         claimedCount++;
+        settledZones.push(zone);
       } catch (err: any) {
         if (err.message?.includes('not GoodDollar verified')) {
           return NextResponse.json({ success: false, notVerified: true });
@@ -71,13 +75,16 @@ export async function POST(req: NextRequest) {
     }
 
     if (claimedCount === 0) {
-      return NextResponse.json({ success: false, alreadyClaimedAll: true });
+      // Nothing paid just now: either everything was already claimed, or every attempt errored.
+      const alreadyClaimedAll = settledZones.length === zones.length;
+      return NextResponse.json({ success: false, alreadyClaimedAll, settledZones });
     }
 
     return NextResponse.json({
       success: true,
       mocked: false,
-      zones
+      zones,
+      settledZones,
     });
   } catch (err: any) {
     console.error('[claim-rewards]', err);
