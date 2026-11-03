@@ -367,6 +367,18 @@ export const celoService = {
         const approveHash = await walletClient.writeContract(request);
         const approveReceipt = await publicClient.waitForTransactionReceipt({ hash: approveHash });
         if (approveReceipt.status !== 'success') return false;
+
+        // The RPC is load-balanced: the node that serves the next eth_call may not have the approval
+        // block yet, so simulating `list` right away can revert with "not authorized". Wait until
+        // reads see the approval before continuing.
+        let visible = false;
+        for (let i = 0; i < 15 && !visible; i++) {
+          visible = await publicClient.readContract({
+            address: FABLE_ITEMS_ADDRESS, abi: FABLE_ITEMS_ABI, functionName: 'isApprovedForAll', args: [account, market],
+          });
+          if (!visible) await new Promise(r => setTimeout(r, 1000));
+        }
+        if (!visible) return false;
       }
 
       const { request } = await publicClient.simulateContract({
