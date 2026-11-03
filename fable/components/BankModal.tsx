@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Loader2, Landmark, ShieldCheck, AlertCircle, X } from 'lucide-react';
 import { ZONE_LEVEL_REWARDS } from '../lib/nft';
 import { celoService } from '../lib/celo';
+import { dbService } from '../lib/supabaseClient';
 
 const ZONE_DISPLAY: Record<string, string> = {
   SunfallDunesScene:  'Sunfall Dunes',
@@ -97,6 +98,16 @@ export default function BankModal({
     }
   };
 
+  // Remove settled zones from the pending list and save it — clearing React state alone brings the
+  // reward back on the next reload, because the pending list is read from the database.
+  const clearSettled = (settledZones: string[]) => {
+    setPlayerData((prev: any) => {
+      const updated = { ...prev, pendingRewards: (prev.pendingRewards || []).filter((z: string) => !settledZones.includes(z)) };
+      dbService.savePlayer(updated);
+      return updated;
+    });
+  };
+
   const handleClaim = async () => {
     if (claiming) return;
 
@@ -127,20 +138,16 @@ export default function BankModal({
         setIsVerified(false);
       } else if (data.success) {
         showMessage(`Successfully claimed ${totalReward} G$!`);
-        setPlayerData((prev: any) => {
-          const updated = { ...prev, pendingRewards: [] };
-          return updated;
-        });
+        clearSettled(data.settledZones ?? pendingZones);
         await refreshBalance();
         onClose();
       } else if (data.alreadyClaimedAll) {
         showMessage('Rewards were already claimed.');
-        setPlayerData((prev: any) => {
-          const updated = { ...prev, pendingRewards: [] };
-          return updated;
-        });
+        clearSettled(data.settledZones ?? pendingZones);
         onClose();
       } else {
+        // Some zones may have been settled even though others failed; clear only those.
+        if (data.settledZones?.length) clearSettled(data.settledZones);
         showMessage('Claim failed — please try again later.');
       }
     } catch (e) {
