@@ -104,7 +104,9 @@ export default function StatsPage() {
 
 function Shell({ children, updated }: { children: React.ReactNode; updated?: string }) {
   return (
-    <main className="min-h-screen bg-black px-4 py-8 font-mono text-zinc-100">
+    // h-screen + overflow-y-auto (not min-h-screen): globals.css locks html/body (fixed, overflow hidden,
+    // touch-action none) for the game, so this element has to be the scroll container itself.
+    <main className="h-screen w-full overflow-y-auto overscroll-contain touch-pan-y select-text bg-black px-4 py-8 font-mono text-zinc-100">
       <div className="mx-auto max-w-4xl">
         <header className="mb-6">
           <h1 className="text-xl font-bold text-yellow-400">FABLE RPG · Live stats</h1>
