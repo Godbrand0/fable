@@ -13,10 +13,10 @@ const KIND_LABEL = {
   marketplace_sale: 'Marketplace sale',
 } as const;
 
-function Card({ id, title, value, sub }: { id: string; title: string; value: string; sub?: string }) {
+function Card({ title, value, sub }: { title: string; value: string; sub?: string }) {
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-      <div className="text-[10px] uppercase tracking-widest text-zinc-500">{id} · {title}</div>
+      <div className="text-[10px] uppercase tracking-widest text-zinc-500">{title}</div>
       <div className={`mt-1 text-3xl font-bold ${value === 'Unavailable' ? 'text-zinc-600' : 'text-emerald-400'}`}>{value}</div>
       {sub && <div className="mt-1 text-[11px] leading-snug text-zinc-500">{sub}</div>}
     </div>
@@ -40,16 +40,16 @@ export default function StatsPage() {
   return (
     <Shell updated={s.generatedAt}>
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <Card id="2.2" title="Lifetime users" value={u ? fmt(u.lifetime) : na}
+        <Card title="Lifetime users" value={u ? fmt(u.lifetime) : na}
           sub={u ? `${u.onboarded} finished the tutorial · ${u.newLast30Days} joined in the last 30 days. Includes internal test accounts.` : undefined} />
-        <Card id="2.3" title="Active users (weekly)" value={u ? fmt(u.weekly) : na}
+        <Card title="Active users (weekly)" value={u ? fmt(u.weekly) : na}
           sub={u ? `${u.daily} in the last 24h · ${u.weekly} in 7 days · ${u.monthly} in 30 days. Active = saved game progress in the window.` : undefined} />
-        <Card id="2.4" title="Active users frequency" value="Weekly" sub="Headline figure for 2.3 is the 7-day count." />
-        <Card id="2.5" title="GoodDollar-verified users today" value={s.verifiedUsers ? fmt(s.verifiedUsers.verified) : na}
+        <Card title="Active users frequency" value="Weekly" sub="The headline active-users figure is the 7-day count." />
+        <Card title="GoodDollar-verified users today" value={s.verifiedUsers ? fmt(s.verifiedUsers.verified) : na}
           sub={s.verifiedUsers ? `Of ${s.verifiedUsers.walletsChecked} player wallets, checked live against GoodDollar's Identity contract.` : undefined} />
-        <Card id="2.6" title="On-chain transactions to date" value={t ? fmt(t.total) : na}
+        <Card title="On-chain transactions to date" value={t ? fmt(t.total) : na}
           sub={t ? `${t.fableItemsContract} to the items contract · ${t.marketplaceContract} to the marketplace · ${t.purchasesAndSalesViaG$} G$ purchases/sales · ${t.deployments} contract deployments. Includes admin setup transactions.` : undefined} />
-        <Card id="2.7" title="Revenue earned to date" value={r ? `${fmt(r.totalGd)} G$` : na}
+        <Card title="Revenue earned to date" value={r ? `${fmt(r.totalGd)} G$` : na}
           sub={r ? `${r.totalUsd != null ? `≈ ${usd(r.totalUsd)} at today's price · ` : ''}${fmt(r.itemSalesGd)} G$ item sales + ${fmt(r.marketplaceFeesGd)} G$ marketplace fees (10%).` : undefined} />
       </section>
 
@@ -57,11 +57,11 @@ export default function StatsPage() {
         <section className="mt-8">
           <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-zinc-400">More</h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <Card id="" title="G$ level rewards paid" value={`${fmt(e.levelRewardsPaidGd)} G$`} sub={`${e.levelRewardsPaid} payouts, verified players only`} />
-            <Card id="" title="Reward pool balance" value={e.rewardPoolGd != null ? `${fmt(e.rewardPoolGd)} G$` : na} sub={e.rewardPoolGd != null && s.prices.gdUsd ? `≈ ${usd(e.rewardPoolGd * s.prices.gdUsd)}` : undefined} />
-            <Card id="" title="Item purchases" value={fmt(e.itemPurchases)} sub="NFT weapons and abilities bought with G$" />
-            <Card id="" title="Marketplace listings" value={fmt(e.marketplaceListings)} sub="All-time" />
-            <Card id="" title="Marketplace sales" value={fmt(e.marketplaceSales)} sub="All-time" />
+            <Card title="G$ level rewards paid" value={`${fmt(e.levelRewardsPaidGd)} G$`} sub={`${e.levelRewardsPaid} payouts, verified players only`} />
+            <Card title="Reward pool balance" value={e.rewardPoolGd != null ? `${fmt(e.rewardPoolGd)} G$` : na} sub={e.rewardPoolGd != null && s.prices.gdUsd ? `≈ ${usd(e.rewardPoolGd * s.prices.gdUsd)}` : undefined} />
+            <Card title="Item purchases" value={fmt(e.itemPurchases)} sub="NFT weapons and abilities bought with G$" />
+            <Card title="Marketplace listings" value={fmt(e.marketplaceListings)} sub="All-time" />
+            <Card title="Marketplace sales" value={fmt(e.marketplaceSales)} sub="All-time" />
           </div>
         </section>
       )}
