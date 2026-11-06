@@ -6,6 +6,7 @@ import { Heart, Skull, Trophy, LogOut, Loader2, Swords, AlertTriangle } from 'lu
 import gameBridge from '../../game/systems/GameBridge';
 import { audioManager } from '../../lib/audio';
 import { dbService } from '../../lib/supabaseClient';
+import { ensureSession } from '../../lib/authClient';
 import type { PartyPresence } from '../../lib/multiplayer';
 import MiniMap from '../MiniMap';
 import GameControls from '../GameControls';
@@ -119,13 +120,13 @@ export default function MultiplayerMission({
     try {
       const addr = wallet || playerData?.wallet_address;
       if (!addr) throw new Error('No wallet connected');
+      await ensureSession(addr);
 
       const res = await fetch('/api/submit-score', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        // The server takes the wallet and display name from the signed-in session.
         body: JSON.stringify({
-          walletAddress: addr,
-          name: playerData.name,
           mode: 'multiplayer',
           zone: 'MultiplayerArenaScene',
           score: cleared.score,

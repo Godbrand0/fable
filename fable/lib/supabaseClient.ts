@@ -59,7 +59,7 @@ export interface LeaderboardEntry {
 }
 
 // Normalise a row from either Supabase (lowercase keys) or localStorage (camelCase).
-function withDefaults(p: any): PlayerData {
+export function normalizePlayer(p: any): PlayerData {
   return {
     wallet_address:   p.wallet_address   ?? 'local_player',
     name:             p.name             ?? 'Hero',
@@ -90,7 +90,7 @@ function withDefaults(p: any): PlayerData {
 }
 
 // Map camelCase PlayerData to the snake_case columns Supabase expects
-function toDbRow(player: PlayerData) {
+export function toDbRow(player: PlayerData) {
   return {
     wallet_address:   player.wallet_address,
     name:             player.name,
@@ -129,27 +129,40 @@ export const dbService = {
     if (!supabase) return null;
     const { data, error } = await supabase.from('players').select('*').eq('wallet_address', address).maybeSingle();
     if (error || !data) return null;
-    return withDefaults(data);
+    return normalizePlayer(data);
   },
 
   async getPlayer(walletAddress: string): Promise<PlayerData | null> {
     const address = walletAddress.toLowerCase();
     if (supabase) {
       const { data, error } = await supabase.from('players').select('*').eq('wallet_address', address).maybeSingle();
-      if (!error && data) return withDefaults(data);
+      if (!error && data) return normalizePlayer(data);
     }
     const players = JSON.parse(localStorage.getItem(LOCAL_KEY) || '{}');
-    return players[address] ? withDefaults(players[address]) : null;
+    return players[address] ? normalizePlayer(players[address]) : null;
   },
 
+  // Writes go through /api/player, which takes the wallet from the signed-in session
+  // (see lib/authClient.ts) — the anon key can only read the players table.
   async savePlayer(player: PlayerData): Promise<PlayerData> {
     const address     = player.wallet_address.toLowerCase();
-    const cleanPlayer = withDefaults({ ...player, wallet_address: address });
+    const cleanPlayer = normalizePlayer({ ...player, wallet_address: address });
 
     if (supabase) {
-      const { data, error } = await supabase.from('players').upsert(toDbRow(cleanPlayer)).select().single();
-      if (!error && data) return withDefaults(data);
-      console.warn('Supabase save failed, falling back to localStorage', error);
+      try {
+        const res = await fetch('/api/player', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(cleanPlayer),
+        });
+        if (res.ok) {
+          const { player: saved } = await res.json();
+          if (saved) return normalizePlayer(saved);
+        }
+        console.warn('Profile save failed, falling back to localStorage', res.status);
+      } catch (err) {
+        console.warn('Profile save failed, falling back to localStorage', err);
+      }
     }
 
     const players = JSON.parse(localStorage.getItem(LOCAL_KEY) || '{}');
@@ -169,18 +182,6 @@ export const dbService = {
 
     const updated = { ...player, nftItems: [...player.nftItems, nftItem] };
     await this.savePlayer(updated);
-  },
-
-  // Log a G$ level reward claim to the audit table
-  async recordLevelRewardClaim(walletAddress: string, levelId: number, zone: string, amountGd: number, txHash: string): Promise<void> {
-    if (!supabase) return;
-    await supabase.from('level_reward_claims').upsert({
-      wallet_address: walletAddress.toLowerCase(),
-      level_id: levelId,
-      zone,
-      amount_gd: amountGd,
-      tx_hash: txHash,
-    }, { onConflict: 'wallet_address,level_id' });
   },
 
   // Save an on-chain progress sync record
@@ -204,14 +205,14 @@ export const dbService = {
         .ilike('name', trimmed)
         .neq('wallet_address', 'local_player')
         .maybeSingle();
-      if (!error && data) return withDefaults(data);
+      if (!error && data) return normalizePlayer(data);
     }
     // localStorage fallback
     const players = JSON.parse(localStorage.getItem(LOCAL_KEY) || '{}');
     const found = Object.values(players).find(
       (p: any) => p.name?.toLowerCase() === trimmed && p.wallet_address !== 'local_player'
     );
-    return found ? withDefaults(found as any) : null;
+    return found ? normalizePlayer(found as any) : null;
   },
 
   // wallet (lowercase) → player name, for display next to on-chain addresses. Missing wallets are omitted.
@@ -230,31 +231,5 @@ export const dbService = {
     }
     const list: LeaderboardEntry[] = JSON.parse(localStorage.getItem(LEADERBOARD_KEY) || '[]');
     return list.filter(e => (e.mode ?? 'single') === mode).sort((a, b) => b.score - a.score).slice(0, 10);
-  },
-
-  async updateLeaderboard(walletAddress: string, name: string, score: number, clearIncrement = 0, mode: LeaderboardMode = 'single'): Promise<void> {
-    const address = walletAddress.toLowerCase();
-    if (supabase) {
-      const { data } = await supabase.from('leaderboard').select('*').eq('wallet_address', address).eq('mode', mode).single();
-      await supabase.from('leaderboard').upsert({
-        wallet_address: address,
-        mode,
-        player_name: name,
-        score: Math.max(data?.score || 0, score),
-        zone_clears: (data?.zone_clears || 0) + clearIncrement,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'wallet_address,mode' });
-      return;
-    }
-    const list: LeaderboardEntry[] = JSON.parse(localStorage.getItem(LEADERBOARD_KEY) || '[]');
-    const index = list.findIndex(e => e.wallet_address.toLowerCase() === address && (e.mode ?? 'single') === mode);
-    if (index >= 0) {
-      list[index].score      = Math.max(list[index].score, score);
-      list[index].zone_clears += clearIncrement;
-      list[index].player_name = name;
-    } else {
-      list.push({ wallet_address: address, mode, player_name: name, zone_clears: clearIncrement, score });
-    }
-    localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(list));
   },
 };

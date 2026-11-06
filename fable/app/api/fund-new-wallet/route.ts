@@ -2,73 +2,85 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createPublicClient, createWalletClient, http, parseEther } from 'viem';
 import { celo } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
-import { createClient } from '@supabase/supabase-js';
+import { getSessionWallet } from '../../../lib/session';
+import { supabaseAdmin } from '../../../lib/adminSupabase';
 
 const CELO_RPC = process.env.NEXT_PUBLIC_CELO_RPC_URL || 'https://forno.celo.org';
 const FUNDING_AMOUNT = parseEther('0.005'); // 0.005 CELO — enough for ~10+ claims
-const ALREADY_FUNDED_KEY = 'funded'; // We'll track this in Supabase
+// Total wallets funded per rolling 24h. Signing in proves wallet ownership but anyone
+// can make new wallets, so this cap is what bounds the admin wallet's worst-case loss.
+const DAILY_CAP = Number(process.env.FUNDING_DAILY_CAP || 50);
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
+// Sends a little CELO for gas to a brand-new embedded wallet, once per wallet.
+//   - the recipient is the signed-in session wallet, never the request body;
+//   - only wallets with no balance and no transactions qualify;
+//   - inserting into celo_fundings (wallet_address is the primary key) claims the
+//     wallet atomically before any CELO moves, so parallel requests can't double-fund.
 export async function POST(req: NextRequest) {
+  const wallet = getSessionWallet(req);
+  if (!wallet) return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
+
+  const adminKey = process.env.ADMIN_PRIVATE_KEY;
+  if (!adminKey || adminKey === '<your_deployer_private_key>') {
+    return NextResponse.json({ success: true, skipped: true, reason: 'Funder not configured' });
+  }
+  if (!supabaseAdmin) {
+    return NextResponse.json({ success: true, skipped: true, reason: 'Funder not configured' });
+  }
+
+  const address = wallet as `0x${string}`;
+  const publicClient = createPublicClient({ chain: celo, transport: http(CELO_RPC) });
+
   try {
-    const { walletAddress } = await req.json();
-
-    if (!walletAddress) {
-      return NextResponse.json({ error: 'Missing walletAddress' }, { status: 400 });
+    const [balance, txCount] = await Promise.all([
+      publicClient.getBalance({ address }),
+      publicClient.getTransactionCount({ address }),
+    ]);
+    if (balance > BigInt(0) || txCount > 0) {
+      return NextResponse.json({ success: true, skipped: true, reason: 'Wallet is not new' });
     }
 
-    const address = (walletAddress as string).toLowerCase();
-
-    // Check if already funded in DB
-    const { data: profile } = await supabase
-      .from('players')
-      .select('celo_funded')
-      .eq('wallet_address', address)
-      .single();
-
-    if (profile?.celo_funded) {
-      return NextResponse.json({ success: true, skipped: true, reason: 'Already funded' });
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { count } = await supabaseAdmin
+      .from('celo_fundings')
+      .select('wallet_address', { count: 'exact', head: true })
+      .gte('funded_at', since);
+    if ((count ?? 0) >= DAILY_CAP) {
+      console.warn('[fund-new-wallet] daily cap reached');
+      return NextResponse.json({ success: true, skipped: true, reason: 'Daily funding limit reached' });
     }
 
-    const adminKey = process.env.ADMIN_PRIVATE_KEY;
-    if (!adminKey || adminKey === '<your_deployer_private_key>') {
-      console.warn('ADMIN_PRIVATE_KEY not configured. Skipping CELO funding.');
-      return NextResponse.json({ success: true, skipped: true, reason: 'Funder not configured' });
+    const { error: claimError } = await supabaseAdmin.from('celo_fundings').insert({ wallet_address: wallet });
+    if (claimError) {
+      if (claimError.code === '23505') {
+        return NextResponse.json({ success: true, skipped: true, reason: 'Already funded' });
+      }
+      throw claimError;
     }
 
-    const account = privateKeyToAccount(adminKey as `0x${string}`);
-    const publicClient = createPublicClient({ chain: celo, transport: http(CELO_RPC) });
-    const walletClient = createWalletClient({ account, chain: celo, transport: http(CELO_RPC) });
+    let hash: `0x${string}`;
+    try {
+      const account = privateKeyToAccount(adminKey as `0x${string}`);
+      const walletClient = createWalletClient({ account, chain: celo, transport: http(CELO_RPC) });
+      const funderBalance = await publicClient.getBalance({ address: account.address });
+      if (funderBalance < FUNDING_AMOUNT) throw new Error('Funder balance too low');
 
-    // Check admin balance
-    const balance = await publicClient.getBalance({ address: account.address });
-    if (balance < FUNDING_AMOUNT) {
-      console.error('Admin wallet has insufficient CELO for funding.');
-      return NextResponse.json({ success: false, error: 'Funder balance too low' }, { status: 500 });
+      hash = await walletClient.sendTransaction({ to: address, value: FUNDING_AMOUNT });
+    } catch (sendErr) {
+      // Nothing was sent: release the claim so the wallet can be funded on a later attempt.
+      await supabaseAdmin.from('celo_fundings').delete().eq('wallet_address', wallet);
+      throw sendErr;
     }
 
-    // Send CELO
-    const hash = await walletClient.sendTransaction({
-      to: walletAddress as `0x${string}`,
-      value: FUNDING_AMOUNT,
-    });
-
+    // From here the CELO is on its way, so the claim row stays even if the steps below fail.
+    await supabaseAdmin.from('celo_fundings').update({ tx_hash: hash }).eq('wallet_address', wallet);
+    await supabaseAdmin.from('players').update({ celo_funded: true }).eq('wallet_address', wallet);
     await publicClient.waitForTransactionReceipt({ hash });
 
-    // Mark as funded in DB
-    await supabase
-      .from('players')
-      .upsert({ wallet_address: address, celo_funded: true }, { onConflict: 'wallet_address' });
-
-    console.log(`Funded ${walletAddress} with 0.005 CELO. Tx: ${hash}`);
+    console.log(`Funded ${wallet} with 0.005 CELO. Tx: ${hash}`);
     return NextResponse.json({ success: true, txHash: hash });
-
   } catch (err: any) {
     console.error('Fund wallet error:', err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: 'Funding failed' }, { status: 500 });
   }
 }

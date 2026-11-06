@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Loader2, Landmark, ShieldCheck, AlertCircle, X } from 'lucide-react';
 import { ZONE_LEVEL_REWARDS } from '../lib/nft';
 import { celoService } from '../lib/celo';
+import { ensureSession } from '../lib/authClient';
 import { dbService } from '../lib/supabaseClient';
 
 const ZONE_DISPLAY: Record<string, string> = {
@@ -126,10 +127,11 @@ export default function BankModal({
 
     setClaiming(true);
     try {
+      await ensureSession(walletAddress);
       const res = await fetch('/api/claim-rewards', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ walletAddress, zones: pendingZones }),
+        body: JSON.stringify({ zones: pendingZones }),
       });
       const data = await res.json();
       

@@ -1,4 +1,4 @@
-import { TAVERN_WEAPONS } from '../components/TavernShop';
+import { TAVERN_WEAPONS } from './weapons';
 import { DEFAULT_SKIN } from './skins';
 
 // Single source of truth for weapon/damage/cooldown math — used by CombatScene for the

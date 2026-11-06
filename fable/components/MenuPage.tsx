@@ -15,6 +15,7 @@ import StarterWeaponModal from './StarterWeaponModal';
 import MultiplayerLobby from './multiplayer/MultiplayerLobby';
 import { dbService, LeaderboardEntry } from '../lib/supabaseClient';
 import { celoService } from '../lib/celo';
+import { ensureSession } from '../lib/authClient';
 import { audioManager } from '../lib/audio';
 import gameBridge from '../game/systems/GameBridge';
 import { GD_ITEMS } from '../lib/nft';
@@ -779,12 +780,10 @@ export default function MenuPage({
                               await web3authLogin();
                               const newAddr = await celoService.getConnectedAddress();
                               if (newAddr) {
+                                // Sign in as the new wallet first: saves and gas funding only act on the session's wallet.
+                                await ensureSession(newAddr);
                                 await dbService.savePlayer({ ...playerData, wallet_address: newAddr });
-                                fetch('/api/fund-new-wallet', {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ walletAddress: newAddr }),
-                                }).then(r => r.json()).then(d => {
+                                fetch('/api/fund-new-wallet', { method: 'POST' }).then(r => r.json()).then(d => {
                                   if (d.success && !d.skipped) showFlashMessage('Wallet funded with CELO for gas!');
                                 }).catch(console.error);
                               }

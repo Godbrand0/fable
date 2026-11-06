@@ -1,5 +1,6 @@
 import { createPublicClient, createWalletClient, custom, http, parseAbi, encodeAbiParameters, parseAbiParameters, parseUnits, formatUnits, WalletClient } from 'viem';
 import { celo } from 'viem/chains';
+import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { FABLE_ITEMS_ADDRESS, FABLE_ITEMS_ABI, NftItem } from './nft';
 import { FABLE_MARKETPLACE_ADDRESS, FABLE_MARKETPLACE_ABI, MarketListing } from './marketplace';
 import { getWeb3AuthProvider } from './web3auth';
@@ -26,6 +27,19 @@ export const UBISCHEME_ABI = parseAbi([
   'function checkEntitlement(address user) view returns (uint256)',
   'function checkEntitlement() view returns (uint256)',
 ]);
+
+const MOCK_WALLET_KEY_STORAGE = 'fable_mock_wallet_key';
+
+// Local dev only (no injected wallet and no Web3Auth): a generated key stored in
+// localStorage. It never holds real funds.
+function getMockWalletKey(): `0x${string}` {
+  let key = localStorage.getItem(MOCK_WALLET_KEY_STORAGE) as `0x${string}` | null;
+  if (!key) {
+    key = generatePrivateKey();
+    localStorage.setItem(MOCK_WALLET_KEY_STORAGE, key);
+  }
+  return key;
+}
 
 export const publicClient = createPublicClient({
   chain: celo,
@@ -87,7 +101,9 @@ export const celoService = {
         return null;
       }
     }
-    return (typeof window !== 'undefined' ? localStorage.getItem('fable_mock_wallet') : null) || null;
+    if (typeof window === 'undefined') return null;
+    const key = localStorage.getItem(MOCK_WALLET_KEY_STORAGE) as `0x${string}` | null;
+    return key ? privateKeyToAccount(key).address : null;
   },
 
   async connectWallet(): Promise<string> {
@@ -96,14 +112,18 @@ export const celoService = {
       const [address] = await walletClient.requestAddresses();
       return address;
     }
-    // Mock wallet for local dev
-    let mockAddress = localStorage.getItem('fable_mock_wallet');
-    if (!mockAddress) {
-      const randHex = Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-      mockAddress = `0x${randHex}`;
-      localStorage.setItem('fable_mock_wallet', mockAddress);
+    // Mock wallet for local dev: a throwaway key kept in localStorage, so dev sign-ins
+    // still go through the same signature check as real wallets (see signMessage).
+    return privateKeyToAccount(getMockWalletKey()).address;
+  },
+
+  // Signs a plain-text message with the connected wallet (or the local dev mock key).
+  async signMessage(address: string, message: string): Promise<`0x${string}`> {
+    const walletClient = this.getWalletClient(address as `0x${string}`);
+    if (walletClient) {
+      return walletClient.signMessage({ account: address as `0x${string}`, message });
     }
-    return mockAddress;
+    return privateKeyToAccount(getMockWalletKey()).signMessage({ message });
   },
 
   async getG$Balance(address: string): Promise<string> {

@@ -3,22 +3,35 @@ import { createPublicClient, createWalletClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { celo } from 'viem/chains';
 import { FABLE_ITEMS_ADDRESS, FABLE_ITEMS_ABI, ZONE_LEVEL_IDS, ZONE_LEVEL_REWARDS } from '../../../lib/nft';
-import { dbService } from '../../../lib/supabaseClient';
+import { recordLevelRewardClaim } from '../../../lib/serverDb';
+import { getSessionWallet } from '../../../lib/session';
 
 const RPC = process.env.NEXT_PUBLIC_CELO_RPC_URL || 'https://forno.celo.org';
 
 const serverClient = createPublicClient({ chain: celo, transport: http(RPC) });
 
+// Pays out zone-clear rewards to the signed-in wallet. The recipient always comes from
+// the session cookie — never the request body — so nobody can trigger payouts for, or
+// redirect them to, a wallet they don't control. The contract still enforces
+// one claim per wallet per level and GoodDollar identity.
 export async function POST(req: NextRequest) {
   try {
-    const { walletAddress, zones } = await req.json() as { walletAddress: string; zones: string[] };
-
-    if (!walletAddress || !zones || !Array.isArray(zones) || zones.length === 0) {
-      return NextResponse.json({ error: 'Missing walletAddress or zones' }, { status: 400 });
+    const walletAddress = getSessionWallet(req);
+    if (!walletAddress) {
+      return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
     }
+
+    const { zones: rawZones } = await req.json() as { zones: string[] };
+    if (!Array.isArray(rawZones) || rawZones.length === 0) {
+      return NextResponse.json({ error: 'Missing zones' }, { status: 400 });
+    }
+    const zones = Array.from(new Set(rawZones.filter((z): z is string => typeof z === 'string'))).slice(0, 10);
 
     const adminKey = process.env.ADMIN_PRIVATE_KEY;
     if (!adminKey || !FABLE_ITEMS_ADDRESS) {
+      if (process.env.NODE_ENV === 'production') {
+        return NextResponse.json({ error: 'Rewards are not configured' }, { status: 500 });
+      }
       // Dev fallback: return mock reward
       return NextResponse.json({
         success: true,
@@ -62,7 +75,7 @@ export async function POST(req: NextRequest) {
         await serverClient.waitForTransactionReceipt({ hash });
 
         const amount = ZONE_LEVEL_REWARDS[zone] ?? 0;
-        dbService.recordLevelRewardClaim(walletAddress, levelId, zone, amount, hash).catch(() => {});
+        recordLevelRewardClaim(walletAddress, levelId, zone, amount, hash).catch(() => {});
         claimedCount++;
         settledZones.push(zone);
       } catch (err: any) {
@@ -88,6 +101,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: any) {
     console.error('[claim-rewards]', err);
-    return NextResponse.json({ error: err.message || 'Reward failed' }, { status: 500 });
+    return NextResponse.json({ error: 'Reward failed' }, { status: 500 });
   }
 }
