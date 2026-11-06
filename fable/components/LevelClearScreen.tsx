@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import gameBridge from '../game/systems/GameBridge';
+import { ensureSession } from '../lib/authClient';
 import { Heart, ArrowRight, CheckCircle2, Trophy, Loader2 } from 'lucide-react';
 import { ZONE_LEVEL_REWARDS } from '../lib/nft';
 
@@ -62,13 +63,13 @@ export default function LevelClearScreen({ clearedZone, playerData, setPlayerDat
     try {
       const addr = walletAddress || playerData?.wallet_address;
       if (!addr) throw new Error('No wallet connected');
+      await ensureSession(addr);
 
       const res = await fetch('/api/submit-score', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        // The server takes the wallet and display name from the signed-in session.
         body: JSON.stringify({
-          walletAddress: addr,
-          name: playerData.name,
           mode: 'single',
           zone: clearedZone,
           score: runResult.score,

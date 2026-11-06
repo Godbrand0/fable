@@ -99,9 +99,9 @@ DROP POLICY IF EXISTS "players_select" ON public.players;
 DROP POLICY IF EXISTS "players_insert" ON public.players;
 DROP POLICY IF EXISTS "players_update" ON public.players;
 
+-- Read-only for the anon key. Writes go through /api/player, which checks the
+-- player's signed-in wallet session and uses the service-role key.
 CREATE POLICY "players_select" ON public.players FOR SELECT USING (true);
-CREATE POLICY "players_insert" ON public.players FOR INSERT WITH CHECK (true);
-CREATE POLICY "players_update" ON public.players FOR UPDATE USING (true);
 
 
 -- ── 2. LEADERBOARD ───────────────────────────────────────────────────────────
@@ -137,8 +137,8 @@ ALTER TABLE public.leaderboard ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "leaderboard_select" ON public.leaderboard;
 DROP POLICY IF EXISTS "leaderboard_all"    ON public.leaderboard;
 
+-- Read-only for the anon key; /api/submit-score writes with the service-role key.
 CREATE POLICY "leaderboard_select" ON public.leaderboard FOR SELECT USING (true);
-CREATE POLICY "leaderboard_all"    ON public.leaderboard FOR ALL   USING (true);
 
 
 -- ── 3. LEVEL REWARD CLAIMS (audit log) ───────────────────────────────────────
@@ -162,8 +162,8 @@ ALTER TABLE public.level_reward_claims ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "claims_select" ON public.level_reward_claims;
 DROP POLICY IF EXISTS "claims_insert" ON public.level_reward_claims;
 
+-- Read-only for the anon key; /api/claim-rewards writes with the service-role key.
 CREATE POLICY "claims_select" ON public.level_reward_claims FOR SELECT USING (true);
-CREATE POLICY "claims_insert" ON public.level_reward_claims FOR INSERT WITH CHECK (true);
 
 
 -- ── 4. CAMPAIGNS (admin-run prize events, G$ payouts) ────────────────────────
@@ -180,7 +180,7 @@ CREATE TABLE IF NOT EXISTS public.campaigns (
     ends_at         TIMESTAMPTZ NOT NULL,
     top_n           INTEGER     NOT NULL CHECK (top_n > 0 AND top_n <= 20),
     pool_gd         NUMERIC     NOT NULL CHECK (pool_gd > 0),
-    status          TEXT        NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'paid', 'failed')),
+    status          TEXT        NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'distributing', 'paid', 'failed')),
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     paid_at         TIMESTAMPTZ,
     CHECK (ends_at > starts_at)
@@ -194,11 +194,24 @@ CREATE TABLE IF NOT EXISTS public.campaign_payouts (
     rank            INTEGER     NOT NULL,
     score           NUMERIC     NOT NULL,
     amount_gd       NUMERIC     NOT NULL,
-    tx_hash         TEXT        NOT NULL,
+    tx_hash         TEXT,                 -- NULL while reserved, set once the transfer is broadcast
     paid_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (campaign_id, wallet_address)
 );
 ALTER TABLE public.campaign_payouts ENABLE ROW LEVEL SECURITY;
+
+
+-- ── 4b. CELO GAS FUNDING LEDGER ──────────────────────────────────────────────
+-- One row per wallet that /api/fund-new-wallet has funded. The primary key makes
+-- funding once-per-wallet atomic; funded_at backs the rolling daily cap.
+-- Service-role only (RLS enabled, no policies).
+CREATE TABLE IF NOT EXISTS public.celo_fundings (
+    wallet_address  TEXT        PRIMARY KEY,
+    tx_hash         TEXT,
+    funded_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE public.celo_fundings ENABLE ROW LEVEL SECURITY;
+CREATE INDEX IF NOT EXISTS idx_celo_fundings_funded_at ON public.celo_fundings (funded_at);
 
 
 -- ── 5. USEFUL INDEXES ────────────────────────────────────────────────────────

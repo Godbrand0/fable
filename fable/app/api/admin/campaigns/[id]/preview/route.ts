@@ -23,9 +23,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const { data: existingPayouts } = await supabaseAdmin
       .from('campaign_payouts')
-      .select('wallet_address')
+      .select('wallet_address, tx_hash')
       .eq('campaign_id', id);
-    const paidWallets = new Set((existingPayouts || []).map(p => p.wallet_address));
+    // A reserved row without a tx hash isn't a confirmed payment (see the distribute route).
+    const paidWallets = new Set((existingPayouts || []).filter(p => p.tx_hash).map(p => p.wallet_address));
 
     const amountEach = winners.length > 0 ? Number(campaign.pool_gd) / winners.length : 0;
 

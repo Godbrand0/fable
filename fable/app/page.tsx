@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import { dbService } from '../lib/supabaseClient';
 import { celoService } from '../lib/celo';
+import { ensureSession } from '../lib/authClient';
 import { audioManager } from '../lib/audio';
 import HUD from '../components/HUD';
 import MenuPage from '../components/MenuPage';
@@ -86,6 +87,10 @@ export default function Home() {
       const addr = await celoService.getConnectedAddress();
       if (!addr) throw new Error('No address returned from Google login');
 
+      // Prove wallet ownership to the server (one signature, no gas) before anything
+      // that saves the profile, claims rewards, or requests gas funding.
+      await ensureSession(addr);
+
       setWalletAddress(addr);
       setWalletConnected(true);
       refreshBalance(addr);
@@ -99,14 +104,12 @@ export default function Home() {
         // Fresh embedded wallet — fund it with a little CELO for gas (fire-and-forget)
         fetch('/api/fund-new-wallet', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ walletAddress: addr }),
         }).catch(console.error);
         setPhase('creating');
       }
     } catch (err) {
       console.error('Google sign-in failed', err);
-      setAuthError('Google sign-in failed. Try again or use a username.');
+      setAuthError('Google sign-in failed. Please try again.');
     } finally {
       setAuthLoading(false);
     }
@@ -118,6 +121,7 @@ export default function Home() {
     setAuthError('');
     try {
       const addr = await celoService.connectWallet();
+      await ensureSession(addr);
       setWalletAddress(addr);
       setWalletConnected(true);
       refreshBalance(addr);
@@ -138,7 +142,9 @@ export default function Home() {
     }
   };
 
-  // ── USERNAME SIGN-IN ────────────────────────────────────────────────────────
+  // ── USERNAME LOOKUP ─────────────────────────────────────────────────────────
+  // A username alone is not proof of anything, so it no longer opens the account.
+  // It finds the hero and points the player at the wallet sign-in that owns it.
   const handleUsernameSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!usernameInput.trim()) return;
@@ -147,8 +153,9 @@ export default function Home() {
     try {
       const found = await dbService.getPlayerByName(usernameInput);
       if (found) {
-        setPlayerData(found);
-        setPhase('menu');
+        const addr = found.wallet_address;
+        setAuthTab('google');
+        setAuthError(`Found ${found.name}. This hero belongs to wallet ${addr.slice(0, 6)}…${addr.slice(-4)}. Sign in with the same Google account or wallet to continue.`);
       } else {
         setAuthError('No account found for that username. Please sign in with your wallet first to create a profile.');
       }

@@ -12,7 +12,7 @@ interface Campaign {
   ends_at: string;
   top_n: number;
   pool_gd: number;
-  status: 'pending' | 'paid' | 'failed';
+  status: 'pending' | 'distributing' | 'paid' | 'failed';
   created_at: string;
   paid_at: string | null;
 }
@@ -195,7 +195,7 @@ export default function CampaignsPanel() {
                   {previewLoading === c.id ? 'Loading…' : 'Preview winners'}
                 </button>
 
-                {c.status !== 'paid' && confirmingId !== c.id && (
+                {c.status !== 'paid' && c.status !== 'distributing' && confirmingId !== c.id && (
                   <button
                     style={{ ...styles.secondaryButton, opacity: windowClosed ? 1 : 0.5 }}
                     disabled={!windowClosed || distributing === c.id}

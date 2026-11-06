@@ -21,8 +21,7 @@ export interface CampaignWinner {
 // (only ever admin-executed, via /api/submit-score — see that route) whose block
 // timestamp falls inside [startsAtMs, endsAtMs], collapsed to each player's best
 // score in that window for the given mode. Deliberately never reads the Supabase
-// `leaderboard` table — that table is open/writable from the browser for instant
-// display, fine for a display-only leaderboard, not for deciding who gets paid G$.
+// `leaderboard` table — that's a display cache, not the record campaigns pay against.
 export async function getCampaignWinners(
   mode: LeaderboardMode,
   startsAtMs: number,
@@ -94,8 +93,9 @@ export async function getCampaignWinnersForMode(
 // Sends `amountGd` (a plain decimal number, rounded to 6dp) of G$ from the admin
 // wallet directly to `to` and waits for the receipt — same admin-key-executed
 // pattern as /api/claim-rewards, just a plain ERC-20 transfer instead of a
-// contract-held reward pool.
-export async function sendG$(to: string, amountGd: number): Promise<string> {
+// contract-held reward pool. `onSubmitted` runs as soon as the tx is broadcast,
+// before the receipt, so callers can record the hash even if waiting fails.
+export async function sendG$(to: string, amountGd: number, onSubmitted?: (hash: `0x${string}`) => Promise<void>): Promise<string> {
   const key = process.env.ADMIN_PRIVATE_KEY;
   if (!key) throw new Error('ADMIN_PRIVATE_KEY not configured');
 
@@ -108,6 +108,7 @@ export async function sendG$(to: string, amountGd: number): Promise<string> {
     functionName: 'transfer',
     args: [to as `0x${string}`, parseUnits(amountGd.toFixed(6), 18)],
   });
+  if (onSubmitted) await onSubmitted(hash);
   await publicClient.waitForTransactionReceipt({ hash });
   return hash;
 }

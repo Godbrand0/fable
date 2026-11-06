@@ -24,6 +24,7 @@
 - [Profile Tab](#profile-tab)
 - [Tech Stack](#tech-stack)
 - [Project Structure](#project-structure)
+- [Security Model](#security-model)
 - [Smart Contract](#smart-contract)
 - [Getting Started](#getting-started)
 - [Environment Variables](#environment-variables)
@@ -51,30 +52,28 @@ The entire earn-and-spend loop runs on Celo mainnet through a single deployed co
 Splash Screen (10s)
        ↓
    Auth Screen
-   ┌──────────┬──────────────┐
-   │  Wallet  │   Username   │
-   └──────────┴──────────────┘
-        │              │
-   Connect Celo    Type hero name
-   wallet          → Lookup in DB
-        │              │
-   Found?         Found? → Game ✅
+   ┌──────────────────┬──────────────┐
+   │ Google / Wallet  │   Username   │
+   └──────────────────┴──────────────┘
+        │                    │
+   Web3Auth (Google)     Type hero name
+   or MetaMask/Valora    → shows which wallet
+        │                  owns that hero
+   Sign the sign-in       → sign in with it
+   message (no gas)
+        │
+   Profile found?
    ├── Yes → Game ✅
-   └── No  → Character Creation
-                  │
-            Enter name + class
-            (saved to wallet address)
-                  │
-              Game ✅
+   └── No  → Character Creation → Game ✅
 ```
 
-### Wallet Sign-In
-Connects to a Celo wallet (MetaMask, MiniPay, etc.). If a profile exists for that address in Supabase it loads immediately. If not, character creation is shown. The wallet auto-switches to Celo mainnet if the user is on the wrong network.
+### Google / Wallet Sign-In
+Google sign-in creates or restores a Web3Auth embedded wallet. Players who already hold G$ can connect MetaMask, Valora or MiniPay instead. The wallet auto-switches to Celo mainnet if the user is on the wrong network.
 
-### Username Sign-In
-For returning players on mobile or secondary devices who may not have their wallet extension available. Enter your hero's name — if a profile is found in the database the game loads directly. If no profile is found, a warning is shown to sign in with wallet first (username login only works for accounts that were created via wallet).
+Either way, the player then signs a short plain-text sign-in message. It sends no transaction and costs no gas. The server checks the signature and sets an httpOnly session cookie bound to that wallet for 7 days. Every server action that pays out or saves data uses the wallet in that cookie (see [Security Model](#security-model)).
 
-When signed in via username, the game uses the wallet address stored in the player's Supabase profile for all on-chain activity. This means a player can sign in with their username on mobile, clear a zone, and the G$ reward is automatically sent to the wallet address that was used to create the account on desktop — no wallet extension needed on mobile.
+### Username Lookup
+Typing a hero's name finds the account and shows which wallet owns it. It no longer opens the account by itself, because a name proves nothing. The player then signs in with that Google account or wallet.
 
 ### Character Creation
 Only reached after wallet connection. Wallet address is stored as the primary key — the profile is permanently linked to that address across all devices.
@@ -163,7 +162,7 @@ gToken.transferAndCall(fableItemsAddress, price, abi.encode(tokenId))
 ```
 
 ### Level Rewards (Server-Verified)
-When a player clears a zone, the frontend calls `/api/claim-level-reward`. The server verifies and calls `grantLevelReward(player, levelId)` on-chain using an admin key. The contract:
+When a player clears a zone, the reward is queued on their profile. Claiming it from the Bank calls `/api/claim-rewards`, which pays the **signed-in session wallet** only, by calling `grantLevelReward(player, levelId)` on-chain with the admin key. The contract:
 1. Checks the player hasn't already claimed this level (`levelClaimed` mapping)
 2. Checks the player is GoodDollar-verified (`getWhitelistedRoot` on IdentityV2)
 3. Transfers G$ from the reward pool to the player
@@ -227,17 +226,16 @@ The in-game Profile tab (bottom nav) shows everything about the player in one pl
 
 | Layer | Technology |
 |---|---|
-| Frontend | Next.js 15, TypeScript, Tailwind CSS v4 |
-| Game Engine | Phaser 3 (WebGL, mobile input) |
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS v4 |
+| Game Engine | Phaser 4 (WebGL, mobile input) |
 | Blockchain | Viem, Celo Mainnet (chain ID 42220) |
 | Token | GoodDollar G$ — ERC-20 + ERC-677 |
 | NFTs | ERC-1155 (FableItems contract) |
 | Identity | GoodDollar IdentityV2 (`getWhitelistedRoot`) |
 | UBI | GoodDollar UBIScheme |
 | Database | Supabase (player profiles, leaderboard, reward audit log) |
-| Auth | Wallet address (primary) + username fallback |
+| Auth | Web3Auth (Google) or injected wallet + signed sign-in message → server session cookie |
 | Hosting | Vercel |
-| Contract tooling | Foundry (forge) |
 
 ---
 
@@ -246,29 +244,53 @@ The in-game Profile tab (bottom nav) shows everything about the player in one pl
 ```
 fable/
 ├── app/
-│   ├── page.tsx                    # Splash → Auth → Character creation → Game
+│   ├── page.tsx                    # Splash → Auth → Character creation → Menu → Game
+│   ├── admin/                      # Password-protected campaign dashboard
+│   ├── stats/                      # Public stats page
 │   └── api/
-│       ├── claim-level-reward/     # Server grants G$ after zone clear
-│       └── mint-item/              # Deprecated (purchases now via transferAndCall)
-├── components/
-│   ├── HUD.tsx                     # In-game heads-up display
-│   ├── TavernShop.tsx              # NFT item shop (buy with G$)
-│   └── LevelClearScreen.tsx        # Zone clear + G$ reward + potion shop
-├── game/                           # Phaser 3 scenes and systems
-│   └── scenes/
-│       ├── TownScene.ts
-│       ├── EmberFieldsScene.ts
-│       ├── AshwaterMarshScene.ts
-│       └── ObsidianPeakScene.ts
+│       ├── auth/                   # login (verify signature → session), logout, me
+│       ├── player/                 # Save the signed-in player's profile
+│       ├── claim-rewards/          # Pay zone-clear G$ to the session wallet
+│       ├── submit-score/           # Leaderboard + on-chain score ledger (capped)
+│       ├── fund-new-wallet/        # One-time CELO gas for new embedded wallets
+│       ├── admin/campaigns/        # Create, preview and distribute campaigns
+│       ├── nft-metadata/           # ERC-1155 metadata JSON
+│       └── stats/                  # Cached public stats
+├── components/                     # React UI: HUD, MenuPage, TavernShop, Marketplace,
+│   └── multiplayer/                #   BankModal, LevelClearScreen, lobby/mission UI
+├── game/                           # Phaser scenes and systems
+│   ├── scenes/                     # CombatScene base + Sunfall Dunes, Ember Fields,
+│   │                               #   Ashwater Marsh, Obsidian Peak, Multiplayer Arena
+│   └── systems/                    # GameBridge (React ↔ Phaser), NetworkBridge (co-op)
 ├── lib/
-│   ├── celo.ts                     # Viem client, buyItem, claimUBI, ensureCeloNetwork
-│   ├── nft.ts                      # Contract address, ABI, item/zone definitions
-│   └── supabaseClient.ts           # DB service, player CRUD, reward audit log
-├── supabase_schema.sql             # Full DB schema (run in Supabase SQL editor)
-└── contract/
-    ├── src/FableItems.sol          # ERC-1155 + G$ earn/spend contract
-    └── test/FableItems.t.sol       # 27 Foundry tests
+│   ├── session.ts                  # Player session cookie (server)
+│   ├── authClient.ts               # ensureSession(): sign in from the browser
+│   ├── scoreLimits.ts              # Max possible score per zone
+│   ├── serverDb.ts                 # Service-role writes (leaderboard, claim log)
+│   ├── celo.ts                     # viem client, purchases, UBI claim, signing
+│   ├── nft.ts / weapons.ts         # Contract ABI, item and weapon definitions
+│   └── supabaseClient.ts           # Profile reads, saves via /api/player
+├── supabase_schema.sql             # Full DB schema (fresh database)
+├── supabase_migration.sql          # Multiplayer / campaigns migration
+└── supabase_migration_security.sql # Locks down RLS, campaign payout locking
 ```
+
+The Solidity sources for FableItems and FableScoreLedger are not in this repository.
+
+---
+
+## Security Model
+
+The game runs in the browser, so the server treats everything the client sends as untrusted:
+
+- **Wallet sessions.** `/api/auth/login` checks a signed sign-in message (EOA or smart wallet) and issues an HMAC-signed, httpOnly cookie. Routes that pay out or write data use the cookie's wallet and ignore any wallet in the request body.
+- **Database.** The anon key can only *read* `players`, `leaderboard` and `level_reward_claims`. Profile saves go through `/api/player`, which only writes the session wallet's row. In production it also removes any NFT weapon or ability the wallet doesn't hold on-chain.
+- **Scores.** `/api/submit-score` rejects any score above the most a zone can produce in one run (`lib/scoreLimits.ts`). It takes the display name from the stored profile.
+- **Gas funding.** Only for the session wallet, only if it has no balance and no transactions, once per wallet (an atomic insert into `celo_fundings`), and at most `FUNDING_DAILY_CAP` wallets per 24h.
+- **Campaign payouts.** Distribution takes a lock on the campaign and reserves each payout row before sending, so a double-click can't pay anyone twice.
+- **Admin sessions** are signed with a key derived from `ADMIN_SESSION_SECRET` and `ADMIN_PASSWORD`. Changing either one logs out every admin session.
+
+**Known limit:** combat runs on the client. A player who signs in with their own wallet can still script a zone clear or a score up to the cap without really playing. They are still limited to one reward per level per GoodDollar-verified wallet. Closing that gap fully needs server-run combat or checks on recorded runs.
 
 ---
 
@@ -323,7 +345,6 @@ Then send G$ directly to the contract address to fund the reward pool.
 - pnpm
 - A Celo wallet with G$ (MetaMask with Celo mainnet, or MiniPay)
 - Supabase project
-- Foundry (`curl -L https://foundry.paradigm.xyz | bash`)
 
 ### Install & Run
 
@@ -336,12 +357,9 @@ pnpm dev
 
 Open `http://localhost:3000` — use Chrome DevTools mobile emulation at 480px width.
 
-### Run Contract Tests
+### Database
 
-```bash
-cd contract
-forge test
-```
+For a fresh Supabase project, run `supabase_schema.sql` then `supabase_schema_multiplayer.sql`. For an existing database, run `supabase_migration.sql` if you haven't, then `supabase_migration_security.sql`. Run the security migration **after** deploying the app version that saves through `/api/player`.
 
 ---
 
@@ -361,9 +379,22 @@ NEXT_PUBLIC_IDENTITY_ADDRESS=0xC361A6E67822a0EDc17D899227dd9FC50BD62F42
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 
+# Optional
+NEXT_PUBLIC_FABLE_SCORE_LEDGER_ADDRESS=
+NEXT_PUBLIC_WEB3AUTH_CLIENT_ID=
+NEXT_PUBLIC_WEB3AUTH_NETWORK=sapphire_devnet
+
 # Server-side (Vercel env, never commit)
 ADMIN_PRIVATE_KEY=your_deployer_private_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key   # required: all DB writes use it
+SESSION_SECRET=long_random_string                  # required in production: signs player sessions
+ADMIN_PASSWORD=admin_dashboard_password
+ADMIN_SESSION_SECRET=another_long_random_string    # required for the admin dashboard
+FUNDING_DAILY_CAP=50                               # max new wallets funded with CELO per 24h
+# FABLE_VALIDATE_NFT_OWNERSHIP=true|false          # default: on in production, off in dev
 ```
+
+Generate secrets with `openssl rand -hex 32`.
 
 ---
 
@@ -377,12 +408,14 @@ ADMIN_PRIVATE_KEY=your_deployer_private_key
 - [x] Level rewards — earn G$ on zone clear (GoodDollar identity gated)
 - [x] GoodDollar identity verification (`getWhitelistedRoot`)
 - [x] Daily UBI claim → +50% XP/Gold buff
-- [x] Wallet + username onboarding with Supabase persistence
+- [x] Google (Web3Auth) / wallet onboarding with signed sessions and Supabase persistence
 - [x] Profile tab (balance, NFTs, zones, weapons, buffs)
 - [x] Auto-switch wallet to Celo mainnet
+- [x] Leaderboards (single / co-op) and admin-run G$ campaigns paid from the on-chain score ledger
+- [x] Co-op multiplayer arena (2–3 players)
+- [x] Player marketplace for NFT items
 
 ### Next
-- [ ] Leaderboard (weekly zone clears, G$ prize pool)
 - [ ] MiniPay deep integration
 - [ ] Additional zones beyond Obsidian Peak
 - [ ] Item crafting (combine loot materials, G$ fee)
