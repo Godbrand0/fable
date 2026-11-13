@@ -1,6 +1,13 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { ZONES } from '../lib/zones';
+
+const NUMBER_WORDS = ['Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
+const zoneCountWord = NUMBER_WORDS[ZONES.length] ?? String(ZONES.length);
+const zoneNameList = ZONES.length > 1
+  ? `${ZONES.slice(0, -1).map(z => z.name).join(', ')} and ${ZONES[ZONES.length - 1].name}`
+  : ZONES[0].name;
 
 /** When `target` is set, the step waits for the user to click the element
  *  marked with the matching `data-tour` attribute (no Next button shown);
@@ -57,7 +64,7 @@ export const TOUR_STEPS: TourStep[] = [
   },
   {
     target: null,
-    text: "The world map. Four zones await, each with its own beasts and boss: Sunfall Dunes, Ember Fields, Ashwater Marsh and Obsidian Peak. Clear a boss to unlock the next zone. Study your enemies here before you march.",
+    text: `The world map. ${zoneCountWord} zones await, each with its own beasts and boss: ${zoneNameList}. Clear a boss to unlock the next zone. Study your enemies here before you march.`,
   },
   {
     target: 'start',

@@ -4,6 +4,7 @@ import { audioManager } from '../../lib/audio';
 import { computePlayerDamage, computeShootCooldown, getWeaponCombatStats, getPlayerTextureKey } from '../../lib/combatFormulas';
 import { DEFAULT_SKIN } from '../../lib/skins';
 import RemotePartyMember from '../systems/RemotePartyMember';
+import { FIRST_ZONE_KEY } from '../../lib/zones';
 
 export interface EnemyConfig {
   key: string;
@@ -69,6 +70,8 @@ export default abstract class CombatScene extends Phaser.Scene {
   protected enemiesDefeated = 0;
   protected requiredDefeatsToBoss = 8;
   protected levelCleared = false;
+  /** Scales the player's walk speed; zones can lower it temporarily (e.g. blizzards). */
+  protected playerSpeedMultiplier = 1;
   private zoneProgressSeeded = false;
 
   // Multiplayer co-op — off by default so single-player zones are byte-for-byte unchanged.
@@ -242,7 +245,7 @@ export default abstract class CombatScene extends Phaser.Scene {
     const unsubNext = gameBridge.on('proceed_to_next_zone', (data: any) => {
       if (!this.levelCleared) return;
       if (!this.scene.isActive(this.scene.key) || !this.cameras?.main) return;
-      const target = data?.targetScene ?? 'SunfallDunesScene';
+      const target = data?.targetScene ?? FIRST_ZONE_KEY;
       this.cameras.main.fadeOut(400, 0, 0, 0);
       this.time.delayedCall(400, () => { this.scene.start(target); });
     });
@@ -479,7 +482,7 @@ export default abstract class CombatScene extends Phaser.Scene {
 
     // ── Movement ──────────────────────────────────────────────────────────────
     this.player.setVelocity(0);
-    const speed = 140;
+    const speed = 140 * this.playerSpeedMultiplier;
     let dx = 0;
     let dy = 0;
 
@@ -831,23 +834,42 @@ export default abstract class CombatScene extends Phaser.Scene {
     );
 
     const lastShot = boss.getData('lastShot') || 0;
-    const interval = this.bossConfig.key === 'fire_demon' ? 1200 : 1800;
+    const pattern = this.bossAttackPattern();
 
-    if (time > lastShot + interval) {
-      const numProj = this.bossConfig.key === 'swamp_hydra' ? 5 : 8;
+    if (time > lastShot + pattern.interval) {
+      const numProj = pattern.count;
+      // Spiral bosses rotate each volley by a fixed step so the gaps keep moving.
+      const spiralOffset = boss.getData('spiralOffset') || 0;
       for (let i = 0; i < numProj; i++) {
-        let a = this.bossConfig.key === 'swamp_hydra'
-          ? angle + (i - (numProj - 1) / 2) * 0.3
-          : (i / numProj) * Math.PI * 2;
+        let a: number;
+        if (pattern.shape === 'fan') a = angle + (i - (numProj - 1) / 2) * 0.3;
+        else if (pattern.shape === 'spiral') a = spiralOffset + (i / numProj) * Math.PI * 2;
+        else a = (i / numProj) * Math.PI * 2;
 
-        this.fireEnemyProjectile(boss.x, boss.y, Math.cos(a) * 200, Math.sin(a) * 200, 2500);
+        this.fireEnemyProjectile(boss.x, boss.y, Math.cos(a) * pattern.speed, Math.sin(a) * pattern.speed, 2500);
       }
+      if (pattern.shape === 'spiral') boss.setData('spiralOffset', spiralOffset + 0.35);
 
-      if (this.bossConfig.key === 'fire_demon' && Math.random() < 0.4) {
+      if (pattern.shakeChance > 0 && Math.random() < pattern.shakeChance) {
         this.cameras.main.shake(200, 0.01);
       }
 
       boss.setData('lastShot', time);
+    }
+  }
+
+  /**
+   * How the boss shoots. Zones override this to give their boss its own pattern;
+   * the default keeps the original behavior for the first four bosses.
+   *  - ring:   `count` projectiles evenly around the boss
+   *  - fan:    `count` projectiles in a 0.3-rad spread aimed at the target
+   *  - spiral: a ring that rotates a little every volley
+   */
+  protected bossAttackPattern(): { interval: number; count: number; shape: 'ring' | 'fan' | 'spiral'; speed: number; shakeChance: number } {
+    switch (this.bossConfig.key) {
+      case 'fire_demon':  return { interval: 1200, count: 8, shape: 'ring', speed: 200, shakeChance: 0.4 };
+      case 'swamp_hydra': return { interval: 1800, count: 5, shape: 'fan',  speed: 200, shakeChance: 0 };
+      default:            return { interval: 1800, count: 8, shape: 'ring', speed: 200, shakeChance: 0 };
     }
   }
 

@@ -4,19 +4,7 @@ import React, { useState, useEffect } from 'react';
 import gameBridge from '../game/systems/GameBridge';
 import { Heart, ArrowRight, CheckCircle2, Trophy, Loader2 } from 'lucide-react';
 import { ZONE_LEVEL_REWARDS } from '../lib/nft';
-
-const ZONE_PROGRESSION: Record<string, string> = {
-  SunfallDunesScene: 'EmberFieldsScene',
-  EmberFieldsScene: 'AshwaterMarshScene',
-  AshwaterMarshScene: 'ObsidianPeakScene',
-};
-
-const ZONE_NAMES: Record<string, string> = {
-  SunfallDunesScene: 'Sunfall Dunes',
-  EmberFieldsScene: 'Ember Fields',
-  AshwaterMarshScene: 'Ashwater Marsh',
-  ObsidianPeakScene: 'Obsidian Peak',
-};
+import { nextZoneKey, zoneName } from '../lib/zones';
 
 const POTIONS = [
   { id: 'minor',   name: 'Minor Potion',  cost: 15, hp: 30,   full: false, color: 'border-green-500',  activeBg: 'bg-green-950/60',  label: '+30 HP' },
@@ -40,9 +28,9 @@ export default function LevelClearScreen({ clearedZone, playerData, setPlayerDat
   const [submitted, setSubmitted]   = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const nextScene    = ZONE_PROGRESSION[clearedZone];
-  const nextZoneName = nextScene ? ZONE_NAMES[nextScene] : '';
-  const isFinalZone  = clearedZone === 'ObsidianPeakScene';
+  const nextScene    = nextZoneKey(clearedZone);
+  const nextZoneName = nextScene ? zoneName(nextScene) : '';
+  const isFinalZone  = !nextScene;
   const zoneReward   = ZONE_LEVEL_REWARDS[clearedZone] ?? 0;
 
   // CombatScene emits { zone, score, kills } on 'zone_cleared' right before this
@@ -132,7 +120,7 @@ export default function LevelClearScreen({ clearedZone, playerData, setPlayerDat
             <CheckCircle2 size={22} className="text-yellow-400" />
             <h2 className="text-xl font-extrabold text-yellow-400 tracking-widest">ZONE CLEARED!</h2>
           </div>
-          <p className="text-zinc-400 text-xs">{ZONE_NAMES[clearedZone] ?? clearedZone} conquered</p>
+          <p className="text-zinc-400 text-xs">{zoneName(clearedZone)} conquered</p>
         </div>
 
         {/* G$ Reward Banner */}

@@ -4,10 +4,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import Phaser from 'phaser';
 import { gameConfig } from '../game/config/gameConfig';
 import BootScene from '../game/scenes/BootScene';
-import SunfallDunesScene from '../game/scenes/SunfallDunesScene';
-import EmberFieldsScene from '../game/scenes/EmberFieldsScene';
-import AshwaterMarshScene from '../game/scenes/AshwaterMarshScene';
-import ObsidianPeakScene from '../game/scenes/ObsidianPeakScene';
+import { ZONE_SCENES } from '../game/scenes/zoneScenes';
+import { FIRST_ZONE_KEY } from '../lib/zones';
 import gameBridge from '../game/systems/GameBridge';
 
 interface GameContainerProps {
@@ -37,13 +35,13 @@ export default function GameContainer({ playerData, startZone }: GameContainerPr
     // 1. Initialize Phaser Game on client
     const configWithScenes: Phaser.Types.Core.GameConfig = {
       ...gameConfig,
-      scene: [BootScene, SunfallDunesScene, EmberFieldsScene, AshwaterMarshScene, ObsidianPeakScene],
+      scene: [BootScene, ...ZONE_SCENES],
     };
 
     const game = new Phaser.Game(configWithScenes);
     gameRef.current = game;
     // BootScene reads this to decide which zone to boot straight into.
-    game.registry.set('startZone', startZone || 'SunfallDunesScene');
+    game.registry.set('startZone', startZone || FIRST_ZONE_KEY);
 
     // 2. Setup initial listener to push character data to scenes when requested.
     // Uses a ref so the handler always reads the latest playerData, not the mount-time snapshot.

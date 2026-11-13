@@ -1,13 +1,16 @@
 import Phaser from 'phaser';
 import CombatScene, { EnemyConfig } from './CombatScene';
+import { getZone } from '../../lib/zones';
+
+const ZONE = getZone('SunfallDunesScene')!;
 
 const WORLD_W = 1440;
 const WORLD_H = 1440;
 
 export default class SunfallDunesScene extends CombatScene {
-  protected zoneName = 'Sunfall Dunes';
-  protected minLevel = 1;
-  protected maxLevel = 1;
+  protected zoneName = ZONE.name;
+  protected minLevel = ZONE.minLevel;
+  protected maxLevel = ZONE.maxLevel;
   protected tileKey = 'tile_sandy'; // sun-baked desert as base
 
   protected regularEnemyConfig: EnemyConfig = {

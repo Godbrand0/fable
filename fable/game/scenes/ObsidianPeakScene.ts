@@ -1,5 +1,8 @@
 import Phaser from 'phaser';
 import CombatScene, { EnemyConfig } from './CombatScene';
+import { getZone } from '../../lib/zones';
+
+const ZONE = getZone('ObsidianPeakScene')!;
 import gameBridge from '../systems/GameBridge';
 
 const WORLD_W = 1440;
@@ -7,9 +10,9 @@ const WORLD_H = 1440;
 const TILE = 32;
 
 export default class ObsidianPeakScene extends CombatScene {
-  protected zoneName = 'Obsidian Peak';
-  protected minLevel = 6;
-  protected maxLevel = 8;
+  protected zoneName = ZONE.name;
+  protected minLevel = ZONE.minLevel;
+  protected maxLevel = ZONE.maxLevel;
   protected tileKey = 'tile_obsidian';
 
   protected regularEnemyConfig: EnemyConfig = {
