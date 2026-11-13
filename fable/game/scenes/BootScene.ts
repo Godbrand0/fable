@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { SKIN_PALETTES, SkinPalette } from '../../lib/skins';
+import { FIRST_ZONE_KEY } from '../../lib/zones';
 
 export default class BootScene extends Phaser.Scene {
   constructor() {
@@ -26,7 +27,7 @@ export default class BootScene extends Phaser.Scene {
 
   create() {
     this.createTextures();
-    const target = this.game.registry.get('startZone') || 'SunfallDunesScene';
+    const target = this.game.registry.get('startZone') || FIRST_ZONE_KEY;
     this.scene.start(target);
   }
 
@@ -1103,6 +1104,308 @@ export default class BootScene extends Phaser.Scene {
       g.fillCircle(32, 32, 22);
       g.fillStyle(0xFFAA00, 0.1);
       g.fillCircle(32, 32, 14);
+    });
+
+    this.createFrostveilTextures(draw);
+    this.createStormspireTextures(draw);
+  }
+
+  // ═══ FROSTVEIL GLACIER (zone 5) ═══════════════════════════════════════════
+  private createFrostveilTextures(draw: (key: string, w: number, h: number, fn: (g: Phaser.GameObjects.Graphics) => void) => void) {
+    // Packed snow ground
+    draw('tile_snow', 32, 32, (g) => {
+      g.fillStyle(0xDCE8F0);
+      g.fillRect(0, 0, 32, 32);
+      g.fillStyle(0xEEF5FA);
+      g.fillRect(2, 3, 10, 2);
+      g.fillRect(18, 12, 9, 2);
+      g.fillRect(6, 22, 12, 2);
+      g.fillStyle(0xC4D6E4);
+      g.fillRect(24, 4, 4, 1);
+      g.fillRect(3, 14, 5, 1);
+      g.fillRect(20, 26, 6, 1);
+      g.fillStyle(0xFFFFFF);
+      g.fillRect(12, 8, 1, 1);
+      g.fillRect(27, 19, 1, 1);
+      g.fillRect(8, 29, 1, 1);
+    });
+
+    // Glacier ice (crevasse walls)
+    draw('tile_ice', 32, 32, (g) => {
+      g.fillStyle(0x5FA8D3);
+      g.fillRect(0, 0, 32, 32);
+      g.fillStyle(0x86C5E8);
+      g.fillRect(2, 2, 28, 12);
+      g.fillStyle(0xB6E0F5);
+      g.fillRect(4, 4, 10, 3);
+      g.fillRect(18, 9, 8, 2);
+      g.fillStyle(0x3C7FAE);
+      g.fillRect(0, 16, 32, 2);
+      g.fillRect(10, 18, 2, 14);
+      g.fillRect(22, 20, 2, 12);
+      g.fillStyle(0xE6F6FF);
+      g.fillRect(5, 5, 3, 1);
+      g.fillRect(20, 10, 2, 1);
+    });
+
+    // Dark crevasse depth, used for the middle row of the ice walls
+    draw('tile_crevasse', 32, 32, (g) => {
+      g.fillStyle(0x0E2A44);
+      g.fillRect(0, 0, 32, 32);
+      g.fillStyle(0x16405F);
+      g.fillRect(0, 0, 32, 4);
+      g.fillRect(0, 28, 32, 4);
+      g.fillStyle(0x2A6A94);
+      g.fillRect(6, 1, 6, 1);
+      g.fillRect(20, 30, 8, 1);
+    });
+
+    // Snow-covered pine
+    draw('snow_pine', 32, 64, (g) => {
+      g.fillStyle(0x4A3020);
+      g.fillRect(14, 50, 4, 14);
+      const tiers: [number, number, number][] = [[16, 4, 10], [16, 16, 13], [16, 30, 15]];
+      tiers.forEach(([cx, top, half]) => {
+        g.fillStyle(0x1F4A3A);
+        g.fillTriangle(cx, top, cx - half, top + 20, cx + half, top + 20);
+        g.fillStyle(0xF2F8FC);
+        g.fillTriangle(cx, top, cx - half * 0.55, top + 9, cx + half * 0.55, top + 9);
+        g.fillRect(cx - half + 2, top + 18, half * 2 - 4, 2);
+      });
+    });
+
+    // Ice crystal cluster
+    draw('ice_crystal', 24, 32, (g) => {
+      g.fillStyle(0x3C7FAE);
+      g.fillTriangle(12, 0, 6, 30, 18, 30);
+      g.fillStyle(0x86C5E8);
+      g.fillTriangle(12, 4, 9, 28, 15, 28);
+      g.fillStyle(0x5FA8D3);
+      g.fillTriangle(4, 12, 0, 30, 8, 30);
+      g.fillTriangle(20, 14, 16, 30, 24, 30);
+      g.fillStyle(0xE6F6FF);
+      g.fillRect(11, 8, 2, 12);
+    });
+
+    // FROST WISP (24×28) — drifting ice spirit with a pale core and trailing wisps
+    draw('frost_wisp', 24, 28, (g) => {
+      g.fillStyle(0x86C5E8, 0.45);
+      g.fillCircle(12, 11, 11);
+      g.fillStyle(0xB6E0F5, 0.8);
+      g.fillCircle(12, 11, 8);
+      g.fillStyle(0xE6F6FF);
+      g.fillCircle(12, 11, 5);
+      // Trailing tail
+      g.fillStyle(0x86C5E8, 0.7);
+      g.fillTriangle(6, 16, 18, 16, 12, 28);
+      g.fillStyle(0xB6E0F5, 0.6);
+      g.fillTriangle(4, 14, 9, 16, 2, 24);
+      g.fillTriangle(20, 14, 15, 16, 22, 24);
+      // Eyes
+      g.fillStyle(0x0E2A44);
+      g.fillRect(8, 9, 3, 3);
+      g.fillRect(13, 9, 3, 3);
+      g.fillStyle(0x5FD3FF);
+      g.fillRect(9, 10, 1, 1);
+      g.fillRect(14, 10, 1, 1);
+    });
+
+    // GLACIER WYRM BOSS (88×88) — coiled ice serpent with a crystal crest
+    draw('glacier_wyrm', 88, 88, (g) => {
+      // Coiled body
+      g.fillStyle(0x3C7FAE);
+      g.fillEllipse(44, 64, 76, 34);
+      g.fillStyle(0x5FA8D3);
+      g.fillEllipse(44, 62, 64, 24);
+      g.fillStyle(0x86C5E8);
+      for (let i = 0; i < 6; i++) g.fillRect(16 + i * 10, 56, 6, 4); // belly scales
+      // Neck
+      g.fillStyle(0x3C7FAE);
+      g.fillRect(34, 26, 20, 36);
+      g.fillStyle(0x5FA8D3);
+      g.fillRect(38, 28, 12, 32);
+      // Head
+      g.fillStyle(0x2E6A96);
+      g.fillRect(26, 12, 36, 22);
+      g.fillStyle(0x3C7FAE);
+      g.fillRect(28, 14, 32, 16);
+      // Jaw / fangs
+      g.fillStyle(0xE6F6FF);
+      g.fillTriangle(30, 34, 34, 34, 32, 40);
+      g.fillTriangle(54, 34, 58, 34, 56, 40);
+      // Crystal crest
+      g.fillStyle(0xB6E0F5);
+      g.fillTriangle(32, 12, 28, 0, 38, 12);
+      g.fillTriangle(44, 12, 44, 0, 50, 12);
+      g.fillTriangle(56, 12, 62, 0, 60, 14);
+      g.fillStyle(0xE6F6FF);
+      g.fillRect(44, 2, 2, 8);
+      // Glowing eyes
+      g.fillStyle(0x5FD3FF);
+      g.fillRect(32, 18, 7, 5);
+      g.fillRect(49, 18, 7, 5);
+      g.fillStyle(0xE6F6FF);
+      g.fillRect(34, 19, 2, 2);
+      g.fillRect(51, 19, 2, 2);
+    });
+  }
+
+  // ═══ STORMSPIRE RUINS (zone 6) ════════════════════════════════════════════
+  private createStormspireTextures(draw: (key: string, w: number, h: number, fn: (g: Phaser.GameObjects.Graphics) => void) => void) {
+    // Weathered flagstone floor
+    draw('tile_ruins', 32, 32, (g) => {
+      g.fillStyle(0x3A3F4E);
+      g.fillRect(0, 0, 32, 32);
+      g.fillStyle(0x4A5063);
+      g.fillRect(1, 1, 14, 14);
+      g.fillRect(17, 1, 14, 14);
+      g.fillRect(1, 17, 14, 14);
+      g.fillRect(17, 17, 14, 14);
+      g.fillStyle(0x565D73);
+      g.fillRect(2, 2, 6, 2);
+      g.fillRect(18, 18, 6, 2);
+      // Moss and cracks
+      g.fillStyle(0x3E5A3A);
+      g.fillRect(14, 12, 4, 2);
+      g.fillRect(4, 28, 3, 2);
+      g.fillStyle(0x2A2E3A);
+      g.fillRect(22, 6, 1, 7);
+      g.fillRect(6, 20, 6, 1);
+    });
+
+    // Rune-carved wall block (ruin walls)
+    draw('tile_ruin_wall', 32, 32, (g) => {
+      g.fillStyle(0x23262F);
+      g.fillRect(0, 0, 32, 32);
+      g.fillStyle(0x30343F);
+      g.fillRect(1, 1, 30, 14);
+      g.fillRect(1, 17, 14, 14);
+      g.fillRect(17, 17, 14, 14);
+      // Glowing storm rune
+      g.fillStyle(0x3FA9F5);
+      g.fillRect(14, 4, 4, 8);
+      g.fillRect(10, 7, 12, 2);
+      g.fillStyle(0xBDE6FF);
+      g.fillRect(15, 5, 2, 6);
+    });
+
+    // Broken pillar
+    draw('ruin_pillar', 24, 56, (g) => {
+      g.fillStyle(0x2A2E3A);
+      g.fillRect(0, 48, 24, 8); // base
+      g.fillStyle(0x565D73);
+      g.fillRect(3, 8, 18, 42);
+      g.fillStyle(0x6B738C);
+      g.fillRect(5, 8, 4, 42);
+      g.fillStyle(0x4A5063);
+      g.fillRect(15, 8, 3, 42);
+      // Jagged broken top
+      g.fillStyle(0x565D73);
+      g.fillTriangle(3, 8, 9, 0, 12, 8);
+      g.fillTriangle(12, 8, 17, 3, 21, 8);
+      // Storm rune band
+      g.fillStyle(0x3FA9F5);
+      g.fillRect(3, 26, 18, 2);
+    });
+
+    // Fallen rubble
+    draw('ruin_rubble', 32, 20, (g) => {
+      g.fillStyle(0x4A5063);
+      g.fillRect(0, 8, 14, 12);
+      g.fillRect(12, 4, 12, 16);
+      g.fillRect(22, 10, 10, 10);
+      g.fillStyle(0x6B738C);
+      g.fillRect(2, 9, 6, 2);
+      g.fillRect(14, 5, 6, 2);
+      g.fillStyle(0x2A2E3A);
+      g.fillRect(12, 4, 1, 16);
+    });
+
+    // Lightning strike bolt (drawn over the target point)
+    draw('lightning_bolt', 24, 96, (g) => {
+      g.fillStyle(0x3FA9F5, 0.6);
+      g.fillTriangle(14, 0, 4, 52, 16, 48);
+      g.fillTriangle(16, 44, 6, 96, 20, 50);
+      g.fillStyle(0xE8F7FF);
+      g.fillTriangle(13, 0, 7, 50, 14, 47);
+      g.fillTriangle(15, 46, 9, 94, 17, 51);
+    });
+
+    // STORM SENTINEL (28×36) — rune-forged guardian crackling with lightning
+    draw('storm_sentinel', 28, 36, (g) => {
+      // Legs
+      g.fillStyle(0x2A2E3A);
+      g.fillRect(6, 28, 6, 8);
+      g.fillRect(16, 28, 6, 8);
+      // Torso
+      g.fillStyle(0x4A5063);
+      g.fillRect(3, 10, 22, 20);
+      g.fillStyle(0x565D73);
+      g.fillRect(5, 12, 18, 6);
+      // Shoulder plates
+      g.fillStyle(0x6B738C);
+      g.fillRect(0, 10, 6, 6);
+      g.fillRect(22, 10, 6, 6);
+      // Head / visor
+      g.fillStyle(0x30343F);
+      g.fillRect(8, 0, 12, 11);
+      g.fillStyle(0x3FA9F5);
+      g.fillRect(9, 4, 10, 3);
+      g.fillStyle(0xE8F7FF);
+      g.fillRect(11, 5, 2, 1);
+      g.fillRect(15, 5, 2, 1);
+      // Chest rune core
+      g.fillStyle(0x3FA9F5);
+      g.fillRect(12, 18, 4, 8);
+      g.fillStyle(0xFFE45C);
+      g.fillRect(13, 20, 2, 4);
+    });
+
+    // THUNDER COLOSSUS BOSS (96×96) — towering stone titan wreathed in storm
+    draw('thunder_colossus', 96, 96, (g) => {
+      // Storm aura
+      g.fillStyle(0x3FA9F5, 0.18);
+      g.fillCircle(48, 48, 46);
+      // Legs
+      g.fillStyle(0x23262F);
+      g.fillRect(26, 70, 16, 26);
+      g.fillRect(54, 70, 16, 26);
+      // Body
+      g.fillStyle(0x3A3F4E);
+      g.fillRect(20, 24, 56, 50);
+      g.fillStyle(0x4A5063);
+      g.fillRect(24, 28, 48, 18);
+      // Arms
+      g.fillStyle(0x30343F);
+      g.fillRect(4, 26, 16, 40);
+      g.fillRect(76, 26, 16, 40);
+      g.fillStyle(0x565D73);
+      g.fillRect(2, 60, 20, 12);   // fists
+      g.fillRect(74, 60, 20, 12);
+      // Head with crown of spikes
+      g.fillStyle(0x30343F);
+      g.fillRect(34, 6, 28, 20);
+      g.fillStyle(0x565D73);
+      g.fillTriangle(34, 6, 38, -4, 42, 6);
+      g.fillTriangle(45, 6, 48, -6, 51, 6);
+      g.fillTriangle(54, 6, 58, -4, 62, 6);
+      // Lightning eyes
+      g.fillStyle(0xFFE45C);
+      g.fillRect(38, 13, 7, 5);
+      g.fillRect(51, 13, 7, 5);
+      g.fillStyle(0xFFFFFF);
+      g.fillRect(40, 14, 2, 2);
+      g.fillRect(53, 14, 2, 2);
+      // Glowing rune veins
+      g.fillStyle(0x3FA9F5);
+      g.fillRect(46, 30, 4, 40);
+      g.fillRect(28, 50, 40, 3);
+      g.fillStyle(0xBDE6FF);
+      g.fillRect(47, 34, 2, 30);
+      // Lightning arcs on the fists
+      g.fillStyle(0xFFE45C);
+      g.fillTriangle(6, 72, 10, 80, 4, 80);
+      g.fillTriangle(88, 72, 92, 80, 86, 80);
     });
   }
 }

@@ -8,6 +8,7 @@ import { audioManager } from '../lib/audio';
 import { MapPin, Flame, Award } from 'lucide-react';
 import LevelClearScreen from './LevelClearScreen';
 import MiniMap from './MiniMap';
+import { unlockedAfterClearing } from '../lib/zones';
 
 interface HUDProps {
   playerData: any;
@@ -123,10 +124,7 @@ export default function HUD({
     // 7. Zone Cleared → show level clear/potion screen
     const unsubClear = gameBridge.on('zone_cleared', (data: any) => {
       setPlayerData((prev: any) => {
-        let maxUnlocked = prev.maxUnlockedZone || 1;
-        if (data.zone === 'SunfallDunesScene' && maxUnlocked < 2) maxUnlocked = 2;
-        if (data.zone === 'EmberFieldsScene' && maxUnlocked < 3) maxUnlocked = 3;
-        if (data.zone === 'AshwaterMarshScene' && maxUnlocked < 4) maxUnlocked = 4;
+        const maxUnlocked = unlockedAfterClearing(data.zone, prev.maxUnlockedZone || 1);
         const zoneProgress = { ...(prev.zoneProgress || {}) };
         delete zoneProgress[data.zone];
         const updated = { ...prev, maxUnlockedZone: maxUnlocked, zoneProgress, currentZone: null };

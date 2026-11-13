@@ -1,15 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Loader2, Landmark, ShieldCheck, AlertCircle, X } from 'lucide-react';
 import { ZONE_LEVEL_REWARDS } from '../lib/nft';
+import { zoneName } from '../lib/zones';
 import { celoService } from '../lib/celo';
 import { dbService } from '../lib/supabaseClient';
-
-const ZONE_DISPLAY: Record<string, string> = {
-  SunfallDunesScene:  'Sunfall Dunes',
-  EmberFieldsScene:   'Ember Fields',
-  AshwaterMarshScene: 'Ashwater Marsh',
-  ObsidianPeakScene:  'Obsidian Peak',
-};
 
 interface BankModalProps {
   playerData: any;
@@ -293,7 +287,7 @@ export default function BankModal({
                   <div className="w-full mt-2 pt-2 border-t border-emerald-900/30 flex flex-col gap-1 text-[10px]">
                     {pendingZones.map((z: string) => (
                       <div key={z} className="flex justify-between text-zinc-400">
-                        <span>{ZONE_DISPLAY[z] ?? z}</span>
+                        <span>{zoneName(z)}</span>
                         <span className="text-emerald-500">+{ZONE_LEVEL_REWARDS[z] || 0}</span>
                       </div>
                     ))}

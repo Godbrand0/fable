@@ -12,6 +12,7 @@ import SkinPicker from '../components/SkinPicker';
 import gameBridge from '../game/systems/GameBridge';
 import { DEFAULT_SKIN } from '../lib/skins';
 import { Wallet2, User, Loader2, AlertTriangle } from 'lucide-react';
+import { furthestUnlockedZoneKey } from '../lib/zones';
 
 const GameContainer = dynamic(() => import('../components/GameContainer'), {
   ssr: false,
@@ -437,7 +438,7 @@ export default function Home() {
   // ── PLAYING ─────────────────────────────────────────────────────────────────
   return (
     <div className="fixed inset-0 bg-black overflow-hidden">
-      <GameContainer playerData={playerData} startZone={playerData?.currentZone || undefined} />
+      <GameContainer playerData={playerData} startZone={playerData?.currentZone || furthestUnlockedZoneKey(playerData?.maxUnlockedZone)} />
       <HUD
         playerData={playerData}
         setPlayerData={setPlayerData}

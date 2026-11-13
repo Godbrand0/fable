@@ -1,14 +1,17 @@
 import Phaser from 'phaser';
 import CombatScene, { EnemyConfig } from './CombatScene';
+import { getZone } from '../../lib/zones';
+
+const ZONE = getZone('AshwaterMarshScene')!;
 
 const WORLD_W = 1440;
 const WORLD_H = 1440;
 const TILE = 32;
 
 export default class AshwaterMarshScene extends CombatScene {
-  protected zoneName = 'Ashwater Marsh';
-  protected minLevel = 3;
-  protected maxLevel = 5;
+  protected zoneName = ZONE.name;
+  protected minLevel = ZONE.minLevel;
+  protected maxLevel = ZONE.maxLevel;
   protected tileKey = 'tile_swamp';
 
   protected regularEnemyConfig: EnemyConfig = {

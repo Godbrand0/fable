@@ -42,21 +42,8 @@ export const FABLE_ITEMS_ABI = parseAbi([
   'event ApprovalForAll(address indexed account, address indexed operator, bool approved)',
 ]);
 
-// Zone scene name → level ID (used for on-chain reward tracking)
-export const ZONE_LEVEL_IDS: Record<string, number> = {
-  EmberFieldsScene:   1,
-  AshwaterMarshScene: 2,
-  ObsidianPeakScene:  3,
-  SunfallDunesScene:  4,
-};
-
-// Human-readable G$ reward per level (matches setLevelReward calls)
-export const ZONE_LEVEL_REWARDS: Record<string, number> = {
-  SunfallDunesScene:  500,
-  EmberFieldsScene:   500,
-  AshwaterMarshScene: 1000,
-  ObsidianPeakScene:  2000,
-};
+// Zone → level ID and G$ reward now live in lib/zones.ts (re-exported for existing imports).
+export { ZONE_LEVEL_IDS, ZONE_LEVEL_REWARDS } from './zones';
 
 // Item slug → ERC-1155 token ID
 export const ITEM_TOKEN_IDS: Record<string, number> = {
