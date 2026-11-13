@@ -5,6 +5,7 @@ import { computePlayerDamage, computeShootCooldown, getWeaponCombatStats, getPla
 import { DEFAULT_SKIN } from '../../lib/skins';
 import RemotePartyMember from '../systems/RemotePartyMember';
 import { FIRST_ZONE_KEY } from '../../lib/zones';
+import ZoneFx from '../systems/ZoneFx';
 
 export interface EnemyConfig {
   key: string;
@@ -72,6 +73,8 @@ export default abstract class CombatScene extends Phaser.Scene {
   protected levelCleared = false;
   /** Scales the player's walk speed; zones can lower it temporarily (e.g. blizzards). */
   protected playerSpeedMultiplier = 1;
+  /** Cosmetic effects (particles, hit/death feedback, lighting). */
+  protected fx!: ZoneFx;
   private zoneProgressSeeded = false;
 
   // Multiplayer co-op — off by default so single-player zones are byte-for-byte unchanged.
@@ -191,6 +194,9 @@ export default abstract class CombatScene extends Phaser.Scene {
 
     // Camera follows player tightly
     this.cameras.main.startFollow(this.player, true, 1, 1);
+
+    this.fx = new ZoneFx(this);
+    this.fx.create(this.player);
 
     // Overlaps / collisions
     this.physics.add.overlap(this.player, this.coins, this.collectCoin as any, undefined, this);
@@ -504,6 +510,7 @@ export default abstract class CombatScene extends Phaser.Scene {
       if (dx < 0) this.player.setFlipX(true);
       if (dx > 0) this.player.setFlipX(false);
     }
+    this.fx.update(time, this.player, dx !== 0 || dy !== 0, this.playerProjectiles.getChildren(), this.enemyProjectiles.getChildren());
 
     // ── Aiming + Shooting ─────────────────────────────────────────────────────
     let ax = this.joystickAimDir.x;
@@ -698,6 +705,8 @@ export default abstract class CombatScene extends Phaser.Scene {
       enemy.setData('netId', netId);
       this.enemyById.set(netId, enemy);
     }
+    this.fx.enemySpawned(enemy);
+    if (isBoss) this.fx.bossSpawned(enemy);
     return enemy;
   }
 
@@ -784,6 +793,7 @@ export default abstract class CombatScene extends Phaser.Scene {
   }
 
   private runRegularEnemyAI(enemy: any, time: number) {
+    if ((enemy.getData('knockUntil') || 0) > time) return; // still sliding from a hit
     const target = this.isMultiplayer ? this.nearestTarget(enemy.x, enemy.y) : this.player;
     const dist = Phaser.Math.Distance.Between(enemy.x, enemy.y, target.x, target.y);
     const aggroRadius = 180;
@@ -914,6 +924,8 @@ export default abstract class CombatScene extends Phaser.Scene {
   }
 
   private damageEnemy(proj: any, enemy: any) {
+    const hitFromX = proj.x - (proj.body?.velocity?.x ?? 0) * 0.05;
+    const hitFromY = proj.y - (proj.body?.velocity?.y ?? 0) * 0.05;
     proj.destroy();
 
     let hp = enemy.getData('hp');
@@ -925,8 +937,7 @@ export default abstract class CombatScene extends Phaser.Scene {
 
     audioManager.playSfx('hit');
     this.showFloatingText(enemy.x, enemy.y - 12, `${dmg}`, '#FFFFFF');
-    enemy.setTint(0xFFFFFF);
-    this.time.delayedCall(80, () => { if (enemy?.active) enemy.clearTint(); });
+    this.fx.enemyHit(enemy, hitFromX, hitFromY);
 
     const netId = enemy.getData('netId');
     if (this.isMultiplayer && netId) {
@@ -971,6 +982,7 @@ export default abstract class CombatScene extends Phaser.Scene {
         coin.setVelocity(Phaser.Math.Between(-70, 70), Phaser.Math.Between(-70, 70));
         coin.setDrag(120);
         coin.setDepth(4);
+        this.fx.coinDropped(coin);
       }
 
       if (Math.random() < 0.25) {
@@ -994,7 +1006,7 @@ export default abstract class CombatScene extends Phaser.Scene {
     }
 
     if (netId) this.enemyById.delete(netId);
-    if (enemy.active) enemy.destroy();
+    if (enemy.active) { this.fx.enemyDied(enemy); enemy.destroy(); }
 
     // Shared kill count: increments once per enemy regardless of who actually landed
     // the blow, so the boss-spawn threshold reflects the whole party's progress, not
@@ -1024,6 +1036,7 @@ export default abstract class CombatScene extends Phaser.Scene {
     if (this.bossHpBar) { this.bossHpBar.destroy(); this.bossHpBar = null; }
     if (this.bossInstance.active) this.bossInstance.destroy();
     this.bossInstance = null;
+    this.fx.bossDied(x, y);
     this.bossLivesRemaining--;
     this.bossPhaseIndex++;
     audioManager.playSfx('bossDie');
@@ -1050,10 +1063,12 @@ export default abstract class CombatScene extends Phaser.Scene {
           coin.setVelocity(Phaser.Math.Between(-70, 70), Phaser.Math.Between(-70, 70));
           coin.setDrag(120);
           coin.setDepth(4);
+          this.fx.coinDropped(coin);
         }
       }
 
       this.levelCleared = true;
+      this.fx.zoneCleared(this.player.x, this.player.y);
       this.player.setVelocity(0);
       audioManager.playSfx('zoneClear');
       audioManager.stopMusic();
@@ -1089,6 +1104,7 @@ export default abstract class CombatScene extends Phaser.Scene {
 
     audioManager.playSfx('playerHurt');
     this.cameras.main.flash(100, 150, 0, 0);
+    this.fx.playerHurt(player);
     this.showFloatingText(player.x, player.y - 12, `-${dmg}`, '#EF2929');
     gameBridge.emit('player_health_changed', { hp: this.playerHP });
 
@@ -1107,6 +1123,7 @@ export default abstract class CombatScene extends Phaser.Scene {
       this.playerHP = Math.max(0, this.playerHP - dmg);
       audioManager.playSfx('playerHurt');
       this.cameras.main.flash(100, 150, 0, 0);
+      this.fx.playerHurt(player);
       this.showFloatingText(player.x, player.y - 12, `-${dmg}`, '#EF2929');
       gameBridge.emit('player_health_changed', { hp: this.playerHP });
       enemy.setData('lastMeleeDmg', now);
@@ -1135,6 +1152,7 @@ export default abstract class CombatScene extends Phaser.Scene {
     this.playerGold += gold;
     audioManager.playSfx('coin');
     this.showFloatingText(coin.x, coin.y - 8, `+${gold}G`, '#FFD700');
+    this.fx.coinCollected(coin.x, coin.y);
     gameBridge.emit('player_gold_changed', gold);
     coin.destroy();
   }
