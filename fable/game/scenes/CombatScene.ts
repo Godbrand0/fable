@@ -23,6 +23,18 @@ const WORLD_W = 1440;
 const WORLD_H = 1440;
 const TILE = 32;
 
+// Boss movement tuning (see runBossAI)
+const BOSS_MIN_SPEED = 45;          // bosses that used to stand still (speed 0) still move
+const BOSS_PREFERRED_RANGE = 210;   // distance the boss tries to keep while circling
+const BOSS_WINDUP_MS = 750;         // warning time before a charge
+const BOSS_CHARGE_SPEED = 420;
+const BOSS_CHARGE_MS = 600;
+// Order the boss cycles through its attacks: its zone pattern twice per cycle,
+// mixed with aimed, curving and splitting shots.
+const BOSS_ATTACK_CYCLE = ['pattern', 'aimed', 'curve', 'pattern', 'split'] as const;
+
+type EnemyShotOpts = { dmg?: number; home?: number; split?: number; splitCount?: number; big?: boolean };
+
 export default abstract class CombatScene extends Phaser.Scene {
   protected player!: Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
   protected enemies!: Phaser.Physics.Arcade.Group;
@@ -97,6 +109,13 @@ export default abstract class CombatScene extends Phaser.Scene {
   protected bossHpMultiplierPerPhase = 1;
   private bossLivesRemaining = 1;
   private bossPhaseIndex = 0;
+  // Boss summons: every `bossSummonInterval` ms (faster once enraged) the boss pushes
+  // `bossSummonCount` of the zone's minions out of its body; they always chase.
+  protected bossSummonCount = 2;
+  protected bossSummonInterval = 30000;
+  protected bossSummonCap = 6;
+  /** Red warning line drawn while the boss winds up a charge. */
+  private bossTelegraph: Phaser.GameObjects.Graphics | null = null;
   private remoteMembers: Map<string, RemotePartyMember> = new Map();
   private lastPosBroadcast = 0;
 
@@ -307,6 +326,7 @@ export default abstract class CombatScene extends Phaser.Scene {
       if (!this.isMultiplayer || this.isSpawnAuthority || this.enemyById.has(data.id)) return;
       const config = data.isBoss ? this.bossConfig : this.regularEnemyConfig;
       const enemy = this.spawnEnemySprite(config, data.x, data.y, data.isBoss, data.id, data.hp);
+      if (data.summoned) this.markSummoned(enemy);
       if (data.isBoss) {
         this.bossInstance = enemy;
         this.bossSpawned = true;
@@ -343,10 +363,9 @@ export default abstract class CombatScene extends Phaser.Scene {
     });
     const unsubEnemyShot = gameBridge.on('mp_in_enemy_shot', (data: any) => {
       if (!this.isMultiplayer || this.isSpawnAuthority) return;
-      const proj = this.enemyProjectiles.create(data.x, data.y, 'enemy_projectile');
-      proj.setVelocity(data.vx, data.vy);
-      proj.setDepth(7);
-      this.time.delayedCall(data.life ?? 2000, () => { if (proj?.active) proj.destroy(); });
+      this.createEnemyProjectile(data.x, data.y, data.vx, data.vy, data.life ?? 2000, {
+        dmg: data.dmg, home: data.home, split: data.split, splitCount: data.splitCount, big: data.big,
+      });
     });
 
     // ── Multiplayer: reconnect / host migration (see NetworkBridge for the Presence
@@ -552,6 +571,8 @@ export default abstract class CombatScene extends Phaser.Scene {
         else this.runRegularEnemyAI(enemy, time);
       });
     }
+    // Curving shots bend toward this client's own player, on every client.
+    this.steerHomingShots();
 
     if (this.shieldCircle) {
       this.shieldCircle.setPosition(this.player.x, this.player.y);
@@ -823,8 +844,9 @@ export default abstract class CombatScene extends Phaser.Scene {
     const target = this.isMultiplayer ? this.nearestTarget(enemy.x, enemy.y) : this.player;
     const dist = Phaser.Math.Distance.Between(enemy.x, enemy.y, target.x, target.y);
     const aggroRadius = 180;
+    const summoned = !!enemy.getData('summoned'); // boss-summoned minions hunt you anywhere
 
-    if (dist > aggroRadius) {
+    if (dist > aggroRadius && !summoned) {
       // Outside aggro range: idle in place
       enemy.setVelocity(0);
       return;
@@ -832,69 +854,270 @@ export default abstract class CombatScene extends Phaser.Scene {
 
     // Chase player
     const angle = Phaser.Math.Angle.Between(enemy.x, enemy.y, target.x, target.y);
-    const speed = enemy.getData('isSlowed') ? this.regularEnemyConfig.speed * 0.5 : this.regularEnemyConfig.speed;
+    // Summoned minions are a little quicker, with a floor so zones whose minions are
+    // slow (or stationary) still produce something that actually chases.
+    const baseSpeed = summoned ? Math.max(this.regularEnemyConfig.speed * 1.15, 60) : this.regularEnemyConfig.speed;
+    const speed = enemy.getData('isSlowed') ? baseSpeed * 0.5 : baseSpeed;
     enemy.setVelocity(
       Math.cos(angle) * speed,
       Math.sin(angle) * speed
     );
     enemy.setFlipX(target.x < enemy.x);
 
-    // Ranged attack when close enough
+    // Ranged attack when close enough (summoned minions only melee)
     const lastShot = enemy.getData('lastShot') || 0;
-    if (time > lastShot + 2200 && dist < 200) {
-      this.fireEnemyProjectile(enemy.x, enemy.y, Math.cos(angle) * 160, Math.sin(angle) * 160);
+    if (!summoned && time > lastShot + 2200 && dist < 200) {
+      this.fireEnemyProjectile(enemy.x, enemy.y, Math.cos(angle) * 160, Math.sin(angle) * 160, 2000, { dmg: this.regularEnemyConfig.damage });
       enemy.setData('lastShot', time);
       playEnemyAction(enemy, 'attack');
     }
   }
 
-  // Creates an enemy projectile locally and — in multiplayer — broadcasts it so every
-  // other client's own player is actually at risk from it too, not just the host's.
-  private fireEnemyProjectile(x: number, y: number, vx: number, vy: number, life = 2000) {
+  // Creates an enemy projectile on this client only. Options:
+  //  - dmg:   damage on hit (falls back to the old boss/minion rule when absent)
+  //  - home:  ms during which the shot bends toward this client's player
+  //  - split: ms after which the shot bursts into `splitCount` smaller shots
+  //  - big:   drawn (and collides) larger — used for splitting orbs
+  // Everything is deterministic from these values, so every client reproduces the
+  // same shot (and its split children) from one broadcast.
+  private createEnemyProjectile(x: number, y: number, vx: number, vy: number, life: number, opts: EnemyShotOpts = {}) {
     const proj = this.enemyProjectiles.create(x, y, 'enemy_projectile');
     proj.setVelocity(vx, vy);
     proj.setDepth(7);
+    if (opts.dmg) proj.setData('dmg', opts.dmg);
+    if (opts.home) proj.setData('homeUntil', this.time.now + opts.home);
+    if (opts.big) proj.setScale(2.2);
     this.time.delayedCall(life, () => { if (proj?.active) proj.destroy(); });
-    if (this.isMultiplayer && this.isSpawnAuthority) {
-      gameBridge.emit('mp_out_enemy_shot', { x, y, vx, vy, life });
+    if (opts.split) {
+      this.time.delayedCall(opts.split, () => {
+        if (!proj?.active) return;
+        const { x: sx, y: sy } = proj;
+        proj.destroy();
+        const n = opts.splitCount ?? 8;
+        const offset = Math.atan2(vy, vx);
+        for (let i = 0; i < n; i++) {
+          const a = offset + (i / n) * Math.PI * 2;
+          this.createEnemyProjectile(sx, sy, Math.cos(a) * 170, Math.sin(a) * 170, 1800, { dmg: opts.dmg });
+        }
+        const pop = this.add.circle(sx, sy, 6, 0xFFFFFF, 0.8).setDepth(8);
+        this.tweens.add({ targets: pop, scale: 4, alpha: 0, duration: 220, onComplete: () => pop.destroy() });
+      });
     }
     return proj;
   }
 
+  // Creates an enemy projectile locally and — in multiplayer — broadcasts it so every
+  // other client's own player is actually at risk from it too, not just the host's.
+  private fireEnemyProjectile(x: number, y: number, vx: number, vy: number, life = 2000, opts: EnemyShotOpts = {}) {
+    const proj = this.createEnemyProjectile(x, y, vx, vy, life, opts);
+    if (this.isMultiplayer && this.isSpawnAuthority) {
+      gameBridge.emit('mp_out_enemy_shot', { x, y, vx, vy, life, ...opts });
+    }
+    return proj;
+  }
+
+  /** Turns curving shots toward the local player while their homing window lasts. */
+  private steerHomingShots() {
+    if (!this.player?.active || this.playerDead) return;
+    const now = this.time.now;
+    const turn = 2.4 * (this.game.loop.delta / 1000); // rad per frame
+    this.enemyProjectiles.getChildren().forEach((p: any) => {
+      if (!p.active) return;
+      const until = p.getData('homeUntil');
+      if (!until || now > until) return;
+      const v = p.body.velocity;
+      const speed = Math.hypot(v.x, v.y);
+      const cur = Math.atan2(v.y, v.x);
+      const want = Phaser.Math.Angle.Between(p.x, p.y, this.player.x, this.player.y);
+      const next = Phaser.Math.Angle.RotateTo(cur, want, turn);
+      p.setVelocity(Math.cos(next) * speed, Math.sin(next) * speed);
+    });
+  }
+
+  /**
+   * Boss behaviour, run by the spawn authority only:
+   *  - strafes around its target at mid range, switching direction every few seconds
+   *  - every ~8 s winds up (red warning line) and charges through where you stood
+   *  - cycles through attacks: its zone pattern (with random gaps), shots aimed where
+   *    you're heading, curving shots, and an orb that bursts into a ring
+   *  - every 30 s pushes two minions out of its body that chase you anywhere
+   *  - below half HP it enrages: faster, fires more often, summons every 20 s
+   */
   private runBossAI(boss: any, time: number) {
     const target = this.isMultiplayer ? this.nearestTarget(boss.x, boss.y) : this.player;
     const angle = Phaser.Math.Angle.Between(boss.x, boss.y, target.x, target.y);
-    const speed = boss.getData('isSlowed') ? this.bossConfig.speed * 0.5 : this.bossConfig.speed;
-    if (boss.getData('animKey')) boss.setFlipX(target.x < boss.x);   // animated art faces right
-    boss.setVelocity(
-      Math.cos(angle) * speed,
-      Math.sin(angle) * speed
-    );
+    const dist = Phaser.Math.Distance.Between(boss.x, boss.y, target.x, target.y);
 
-    const lastShot = boss.getData('lastShot') || 0;
-    const pattern = this.bossAttackPattern();
-
-    if (time > lastShot + pattern.interval) {
-      const numProj = pattern.count;
-      // Spiral bosses rotate each volley by a fixed step so the gaps keep moving.
-      const spiralOffset = boss.getData('spiralOffset') || 0;
-      for (let i = 0; i < numProj; i++) {
-        let a: number;
-        if (pattern.shape === 'fan') a = angle + (i - (numProj - 1) / 2) * 0.3;
-        else if (pattern.shape === 'spiral') a = spiralOffset + (i / numProj) * Math.PI * 2;
-        else a = (i / numProj) * Math.PI * 2;
-
-        this.fireEnemyProjectile(boss.x, boss.y, Math.cos(a) * pattern.speed, Math.sin(a) * pattern.speed, 2500);
-      }
-      if (pattern.shape === 'spiral') boss.setData('spiralOffset', spiralOffset + 0.35);
-      playEnemyAction(boss, 'attack');
-
-      if (pattern.shakeChance > 0 && Math.random() < pattern.shakeChance) {
-        this.cameras.main.shake(200, 0.01);
-      }
-
-      boss.setData('lastShot', time);
+    if (!boss.getData('aiInit')) {
+      boss.setData({
+        aiInit: true,
+        mode: 'strafe',
+        strafeDir: Math.random() < 0.5 ? -1 : 1,
+        nextStrafeFlip: time + Phaser.Math.Between(1800, 3600),
+        nextCharge: time + Phaser.Math.Between(5000, 8000),
+        nextSummon: time + 8000, // first summon comes early so the player can't settle in
+        attackStep: 0,
+        lastShot: time - 600,
+      });
     }
+
+    const enraged = boss.getData('hp') <= boss.getData('maxHp') * 0.5;
+    if (enraged && !boss.getData('enraged')) this.enrageBoss(boss);
+    const rage = enraged ? 1.3 : 1;
+    const slow = boss.getData('isSlowed') ? 0.5 : 1;
+    const mode = boss.getData('mode');
+
+    if (boss.getData('animKey') && mode !== 'charge') boss.setFlipX(target.x < boss.x); // animated art faces right
+
+    // ── Movement ────────────────────────────────────────────────────────────
+    if (mode === 'windup') {
+      boss.setVelocity(0, 0);
+      if (time >= boss.getData('modeUntil')) {
+        const a = boss.getData('chargeAngle');
+        const v = BOSS_CHARGE_SPEED * rage * slow;
+        boss.setVelocity(Math.cos(a) * v, Math.sin(a) * v);
+        boss.setData({ mode: 'charge', modeUntil: time + BOSS_CHARGE_MS });
+        this.clearBossTelegraph();
+      }
+    } else if (mode === 'charge') {
+      if (time >= boss.getData('modeUntil')) {
+        boss.setVelocity(0, 0);
+        boss.setData({ mode: 'strafe', nextCharge: time + Phaser.Math.Between(7000, 10000) / rage });
+      }
+    } else {
+      if (time >= boss.getData('nextStrafeFlip')) {
+        boss.setData({ strafeDir: -boss.getData('strafeDir'), nextStrafeFlip: time + Phaser.Math.Between(1800, 3600) });
+      }
+      const base = Math.max(this.bossConfig.speed, BOSS_MIN_SPEED) * rage * slow;
+      // Close in when far, back off when the player hugs it, and always circle.
+      const radial = Phaser.Math.Clamp((dist - BOSS_PREFERRED_RANGE) / 80, -1, 1) * 1.2;
+      const tangent = boss.getData('strafeDir');
+      boss.setVelocity(
+        (Math.cos(angle) * radial + Math.cos(angle + Math.PI / 2) * tangent) * base,
+        (Math.sin(angle) * radial + Math.sin(angle + Math.PI / 2) * tangent) * base,
+      );
+
+      if (time >= boss.getData('nextCharge') && dist < 520) {
+        boss.setData({ mode: 'windup', modeUntil: time + BOSS_WINDUP_MS, chargeAngle: angle });
+        boss.setVelocity(0, 0);
+        playEnemyAction(boss, 'attack');
+        this.drawBossTelegraph(boss.x, boss.y, angle, BOSS_CHARGE_SPEED * rage * slow * BOSS_CHARGE_MS / 1000);
+        return;
+      }
+    }
+
+    // ── Summons ─────────────────────────────────────────────────────────────
+    if (time >= boss.getData('nextSummon')) {
+      this.summonMinions(boss);
+      boss.setData('nextSummon', time + (enraged ? this.bossSummonInterval * 2 / 3 : this.bossSummonInterval));
+    }
+
+    // ── Attacks (not while winding up or charging) ──────────────────────────
+    const pattern = this.bossAttackPattern();
+    const interval = pattern.interval * (enraged ? 0.75 : 1);
+    if (mode !== 'strafe' || time <= boss.getData('lastShot') + interval) return;
+
+    const dmg = this.bossConfig.damage;
+    const step = boss.getData('attackStep');
+    const kind = BOSS_ATTACK_CYCLE[step % BOSS_ATTACK_CYCLE.length];
+    boss.setData('attackStep', step + 1);
+
+    if (kind === 'pattern') {
+      const n = pattern.count;
+      // Random rotation each volley so the safe gaps are never in the same place.
+      const jitter = Math.random() * ((Math.PI * 2) / n);
+      const spiralOffset = boss.getData('spiralOffset') || 0;
+      for (let i = 0; i < n; i++) {
+        let a: number;
+        if (pattern.shape === 'fan') a = angle + (i - (n - 1) / 2) * 0.3 + Phaser.Math.FloatBetween(-0.08, 0.08);
+        else if (pattern.shape === 'spiral') a = spiralOffset + (i / n) * Math.PI * 2;
+        else a = jitter + (i / n) * Math.PI * 2;
+        this.fireEnemyProjectile(boss.x, boss.y, Math.cos(a) * pattern.speed, Math.sin(a) * pattern.speed, 2500, { dmg });
+      }
+      if (pattern.shape === 'spiral') boss.setData('spiralOffset', spiralOffset + Phaser.Math.FloatBetween(0.25, 0.6));
+    } else if (kind === 'aimed') {
+      // Lead the target: aim where it will be when the shot arrives.
+      const speed = 240;
+      const tv = target === this.player ? (this.player.body as Phaser.Physics.Arcade.Body).velocity : { x: 0, y: 0 };
+      const t = dist / speed;
+      const aim = Phaser.Math.Angle.Between(boss.x, boss.y, target.x + tv.x * t, target.y + tv.y * t);
+      const spread = enraged ? [-0.3, -0.15, 0, 0.15, 0.3] : [-0.16, 0, 0.16];
+      spread.forEach(s => this.fireEnemyProjectile(boss.x, boss.y, Math.cos(aim + s) * speed, Math.sin(aim + s) * speed, 2500, { dmg }));
+    } else if (kind === 'curve') {
+      // A wide fan whose shots bend back toward the player for about a second.
+      const n = enraged ? 7 : 5;
+      for (let i = 0; i < n; i++) {
+        const a = angle + (i - (n - 1) / 2) * 0.45;
+        this.fireEnemyProjectile(boss.x, boss.y, Math.cos(a) * 170, Math.sin(a) * 170, 2800, { dmg, home: 1000 });
+      }
+    } else {
+      // A slow, big orb that bursts into a ring near the player.
+      const a = angle + Phaser.Math.FloatBetween(-0.15, 0.15);
+      this.fireEnemyProjectile(boss.x, boss.y, Math.cos(a) * 130, Math.sin(a) * 130, 3000, {
+        dmg, big: true, split: Phaser.Math.Clamp((dist / 130) * 1000 * 0.8, 500, 1600), splitCount: enraged ? 12 : 8,
+      });
+    }
+
+    playEnemyAction(boss, 'attack');
+    if (pattern.shakeChance > 0 && Math.random() < pattern.shakeChance) {
+      this.cameras.main.shake(200, 0.01);
+    }
+    boss.setData('lastShot', time);
+  }
+
+  /** Boss-summoned minions: always chase, melee only, and are worth almost nothing (no farming). */
+  private markSummoned(enemy: any) {
+    enemy.setData('summoned', true);
+    enemy.setData('points', 1);
+  }
+
+  private summonMinions(boss: any) {
+    const alive = this.enemies.getChildren().filter((e: any) => e.active && e.getData('summoned')).length;
+    const n = Math.min(this.bossSummonCount, this.bossSummonCap - alive);
+    if (n <= 0) return;
+    playEnemyAction(boss, 'attack');
+    this.cameras.main.shake(150, 0.006);
+    this.showFloatingText(boss.x, boss.y - boss.displayHeight / 2 - 8, 'SUMMON!', '#FF8844');
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const x = boss.x + Math.cos(a) * boss.displayWidth * 0.3;
+      const y = boss.y + Math.sin(a) * boss.displayHeight * 0.3;
+      const netId = this.isMultiplayer ? `s${++this.enemyIdCounter}` : '';
+      const minion = this.spawnEnemySprite(this.regularEnemyConfig, x, y, false, netId);
+      this.markSummoned(minion);
+      // Burst out of the body before starting the chase.
+      minion.setVelocity(Math.cos(a) * 220, Math.sin(a) * 220);
+      minion.setData('knockUntil', this.time.now + 300);
+      if (this.isMultiplayer) {
+        gameBridge.emit('mp_out_enemy_spawn', { id: netId, isBoss: false, summoned: true, x, y, hp: this.regularEnemyConfig.hp });
+      }
+    }
+  }
+
+  private enrageBoss(boss: any) {
+    boss.setData('enraged', true);
+    this.cameras.main.shake(300, 0.012);
+    this.showFloatingText(boss.x, boss.y - boss.displayHeight / 2 - 8, 'ENRAGED!', '#FF3333');
+    boss.setTint(0xFF5555);
+    this.time.delayedCall(400, () => { if (boss.active) boss.clearTint(); });
+  }
+
+  private drawBossTelegraph(x: number, y: number, angle: number, length: number) {
+    this.clearBossTelegraph();
+    const g = this.add.graphics().setDepth(4);
+    g.lineStyle(26, 0xFF2222, 0.28);
+    g.lineBetween(x, y, x + Math.cos(angle) * length, y + Math.sin(angle) * length);
+    g.lineStyle(2, 0xFF5555, 0.8);
+    g.lineBetween(x, y, x + Math.cos(angle) * length, y + Math.sin(angle) * length);
+    this.tweens.add({ targets: g, alpha: 0.35, duration: 120, yoyo: true, repeat: -1 });
+    this.bossTelegraph = g;
+  }
+
+  private clearBossTelegraph() {
+    if (!this.bossTelegraph) return;
+    this.tweens.killTweensOf(this.bossTelegraph);
+    this.bossTelegraph.destroy();
+    this.bossTelegraph = null;
   }
 
   /**
@@ -1002,11 +1225,13 @@ export default abstract class CombatScene extends Phaser.Scene {
 
     const points = enemy.getData('points') || 10;
 
+    const summoned = !!enemy.getData('summoned');
     if (!fromNetwork) {
       this.runScore += points;
       this.personalKills++;
 
-      const numCoins = Phaser.Math.Between(1, 3);
+      // Boss-summoned minions drop nothing, so the boss can't be farmed.
+      const numCoins = summoned ? 0 : Phaser.Math.Between(1, 3);
       for (let i = 0; i < numCoins; i++) {
         const coin = this.coins.create(enemy.x, enemy.y, 'coin') as any;
         coin.setVelocity(Phaser.Math.Between(-70, 70), Phaser.Math.Between(-70, 70));
@@ -1015,7 +1240,7 @@ export default abstract class CombatScene extends Phaser.Scene {
         this.fx.coinDropped(coin);
       }
 
-      if (Math.random() < 0.25) {
+      if (!summoned && Math.random() < 0.25) {
         const lootKey = enemy.texture.key === 'poison_slime' ? 'scorpion' : 'fire_item';
         const loot = this.lootItems.create(enemy.x, enemy.y, 'coin') as any;
         loot.setTint(enemy.texture.key === 'poison_slime' ? 0x8AE234 : 0xEF2929);
@@ -1041,7 +1266,7 @@ export default abstract class CombatScene extends Phaser.Scene {
     // Shared kill count: increments once per enemy regardless of who actually landed
     // the blow, so the boss-spawn threshold reflects the whole party's progress, not
     // just whichever client happens to be resolving this call.
-    if (!this.isMultiplayer || !fromNetwork || this.isSpawnAuthority) {
+    if (!summoned && (!this.isMultiplayer || !fromNetwork || this.isSpawnAuthority)) {
       this.enemiesDefeated++;
     }
     gameBridge.emit('zone_progress_updated', { zone: this.scene.key, enemiesDefeated: this.enemiesDefeated, runScore: this.runScore });
@@ -1059,6 +1284,15 @@ export default abstract class CombatScene extends Phaser.Scene {
   // means a teammate's blow did it and we're just following the shared transition.
   private resolveBossPhaseDefeat(fromNetwork: boolean) {
     if (!this.bossInstance) return; // already resolved (e.g. a duplicate broadcast)
+    this.clearBossTelegraph();
+    // Summoned minions die with the boss (every client does this itself, no rewards).
+    this.enemies.getChildren().slice().forEach((e: any) => {
+      if (!e.active || !e.getData('summoned')) return;
+      const id = e.getData('netId');
+      if (id) { this.resolvedEnemyIds.add(id); this.enemyById.delete(id); }
+      this.fx.enemyDied(e);
+      e.destroy();
+    });
     const { x, y } = this.bossInstance;
     const points = this.bossInstance.getData('points') || this.bossConfig.points;
     const oldNetId = this.bossInstance.getData('netId');
@@ -1119,6 +1353,7 @@ export default abstract class CombatScene extends Phaser.Scene {
   // → callback fires as cb(player, groupMember). Player is always first arg.
   private damagePlayer(player: any, proj: any) {
     if (this.playerDead) { proj.destroy(); return; }
+    const shotDmg = proj.getData?.('dmg');
     proj.destroy();
 
     if (this.shieldActive) return;
@@ -1128,7 +1363,8 @@ export default abstract class CombatScene extends Phaser.Scene {
       return;
     }
 
-    const rawDmg = this.bossSpawned ? this.bossConfig.damage : this.regularEnemyConfig.damage;
+    // Shots carry their shooter's damage, so minion shots stay minion-strength during the boss fight.
+    const rawDmg = shotDmg ?? (this.bossSpawned ? this.bossConfig.damage : this.regularEnemyConfig.damage);
     const dmg = Math.max(1, rawDmg - (this.playerDefense * 3));
     this.playerHP = Math.max(0, this.playerHP - dmg);
 
