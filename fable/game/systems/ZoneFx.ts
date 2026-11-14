@@ -231,7 +231,7 @@ export default class ZoneFx {
   }
 
   // ── Per-frame ───────────────────────────────────────────────────────────────
-  update(time: number, player: Phaser.Physics.Arcade.Sprite, moving: boolean, playerShots: Phaser.GameObjects.GameObject[], enemyShots: Phaser.GameObjects.GameObject[]) {
+  update(time: number, player: Phaser.Physics.Arcade.Sprite, moving: boolean, playerShots: Phaser.GameObjects.GameObject[], enemyShots: Phaser.GameObjects.GameObject[], tilt = true) {
     // Scrollfactor-0 objects still get zoomed, so undo the zoom to keep the
     // vignette exactly screen-sized (the boss entrance tweens the zoom).
     if (this.vignette) {
@@ -245,9 +245,10 @@ export default class ZoneFx {
       this.ambientZone.setTo(v.x - 20, v.y - 20, v.width + 40, v.height + 40);
     }
 
-    // Footstep dust + a light walking bob/tilt on the hero.
+    // Footstep dust + a light walking bob/tilt on the hero (heroes with a real
+    // walk animation skip the tilt — their frames already move).
     this.dust.emitting = moving;
-    if (moving) {
+    if (moving && tilt) {
       player.setAngle(Math.sin(time / 70) * 5);
     } else if (player.angle !== 0) {
       player.setAngle(player.angle * 0.7);

@@ -6,6 +6,7 @@ import { DEFAULT_SKIN } from '../../lib/skins';
 import RemotePartyMember from '../systems/RemotePartyMember';
 import { FIRST_ZONE_KEY } from '../../lib/zones';
 import ZoneFx from '../systems/ZoneFx';
+import { HERO_ANIM, HERO_BODY, HERO_SHEET_KEY, isAnimatedHeroTexture } from '../systems/heroSprite';
 
 export interface EnemyConfig {
   key: string;
@@ -75,6 +76,10 @@ export default abstract class CombatScene extends Phaser.Scene {
   protected playerSpeedMultiplier = 1;
   /** Cosmetic effects (particles, hit/death feedback, lighting). */
   protected fx!: ZoneFx;
+  /** True while the hero uses the animated sprite sheet (human skin + bamboo staff). */
+  private heroAnimated = false;
+  /** One-shot hero animation in progress (shoot / hurt / death), which walk/idle must not interrupt. */
+  private heroAction: string | null = null;
   private zoneProgressSeeded = false;
 
   // Multiplayer co-op — off by default so single-player zones are byte-for-byte unchanged.
@@ -164,7 +169,7 @@ export default abstract class CombatScene extends Phaser.Scene {
         this.activeAbility = data.activeAbility ?? null;
         this.playerSkin = data.skin || DEFAULT_SKIN;
         // Apply equipped skin + weapon texture on load
-        if (this.player?.active) this.player.setTexture(getPlayerTextureKey(this.playerSkin, data.equippedWeapon ?? 'bamboo_stick'));
+        if (this.player?.active) this.applyPlayerLook(getPlayerTextureKey(this.playerSkin, data.equippedWeapon ?? 'bamboo_stick'));
 
         // Seed mid-zone kill/score progress once, from the player's last save
         if (!this.zoneProgressSeeded) {
@@ -191,6 +196,12 @@ export default abstract class CombatScene extends Phaser.Scene {
     this.player = this.physics.add.sprite(WORLD_W / 2, WORLD_H - 200, 'player');
     this.player.setCollideWorldBounds(true);
     this.player.setDepth(6);
+    this.heroAnimated = false;
+    this.heroAction = null;
+    this.applyPlayerLook('player');
+    this.player.on(Phaser.Animations.Events.ANIMATION_COMPLETE, (anim: Phaser.Animations.Animation) => {
+      if (anim.key !== HERO_ANIM.death) this.heroAction = null;
+    });
 
     // Camera follows player tightly
     this.cameras.main.startFollow(this.player, true, 1, 1);
@@ -256,7 +267,7 @@ export default abstract class CombatScene extends Phaser.Scene {
       this.time.delayedCall(400, () => { this.scene.start(target); });
     });
     const unsubW = gameBridge.on('weapon_changed', ({ textureKey }: any) => {
-      this.player.setTexture(textureKey);
+      this.applyPlayerLook(textureKey);
     });
     // Pause menu: freeze/resume the running scene without destroying it
     const unsubPause = gameBridge.on('game_pause', () => { this.scene.pause(); });
@@ -507,10 +518,17 @@ export default abstract class CombatScene extends Phaser.Scene {
     if (dx !== 0 || dy !== 0) {
       const len = Math.sqrt(dx * dx + dy * dy);
       this.player.setVelocity((dx / len) * speed, (dy / len) * speed);
-      if (dx < 0) this.player.setFlipX(true);
-      if (dx > 0) this.player.setFlipX(false);
+      // While a shot is playing the hero keeps facing where they fired.
+      if (this.heroAction !== HERO_ANIM.shoot) {
+        if (dx < 0) this.player.setFlipX(true);
+        if (dx > 0) this.player.setFlipX(false);
+      }
     }
-    this.fx.update(time, this.player, dx !== 0 || dy !== 0, this.playerProjectiles.getChildren(), this.enemyProjectiles.getChildren());
+    const moving = dx !== 0 || dy !== 0;
+    if (this.heroAnimated && !this.heroAction) {
+      this.player.anims.play(moving ? HERO_ANIM.walk : HERO_ANIM.idle, true);
+    }
+    this.fx.update(time, this.player, moving, this.playerProjectiles.getChildren(), this.enemyProjectiles.getChildren(), !this.heroAnimated);
 
     // ── Aiming + Shooting ─────────────────────────────────────────────────────
     let ax = this.joystickAimDir.x;
@@ -543,7 +561,7 @@ export default abstract class CombatScene extends Phaser.Scene {
     }
 
     // ── Player HP label ───────────────────────────────────────────────────────
-    this.playerHPLabel.setPosition(this.player.x, this.player.y - 20);
+    this.playerHPLabel.setPosition(this.player.x, this.player.y - (this.heroAnimated ? 22 : 20));
     this.playerHPLabel.setText(`♥ ${this.playerHP}`);
 
     // ── Multiplayer: interpolate remote party members, broadcast our own position ──
@@ -590,6 +608,11 @@ export default abstract class CombatScene extends Phaser.Scene {
     proj.setDepth(8);
     this.time.delayedCall(1500, () => { if (proj?.active) proj.destroy(); });
     audioManager.playSfx('shoot');
+    if (this.heroAnimated) {
+      if (dx < -0.1) this.player.setFlipX(true);
+      else if (dx > 0.1) this.player.setFlipX(false);
+      this.playHeroAction(HERO_ANIM.shoot);
+    }
   }
 
   private triggerActiveAbility() {
@@ -1104,7 +1127,7 @@ export default abstract class CombatScene extends Phaser.Scene {
 
     audioManager.playSfx('playerHurt');
     this.cameras.main.flash(100, 150, 0, 0);
-    this.fx.playerHurt(player);
+    this.onPlayerHurt();
     this.showFloatingText(player.x, player.y - 12, `-${dmg}`, '#EF2929');
     gameBridge.emit('player_health_changed', { hp: this.playerHP });
 
@@ -1123,12 +1146,49 @@ export default abstract class CombatScene extends Phaser.Scene {
       this.playerHP = Math.max(0, this.playerHP - dmg);
       audioManager.playSfx('playerHurt');
       this.cameras.main.flash(100, 150, 0, 0);
-      this.fx.playerHurt(player);
+      this.onPlayerHurt();
       this.showFloatingText(player.x, player.y - 12, `-${dmg}`, '#EF2929');
       gameBridge.emit('player_health_changed', { hp: this.playerHP });
       enemy.setData('lastMeleeDmg', now);
       if (this.playerHP <= 0) this.playerDied();
     }
+  }
+
+  /**
+   * Switches the hero between the animated sprite sheet (human + bamboo staff)
+   * and the static per-skin/weapon textures, keeping the collision box on the body.
+   */
+  protected applyPlayerLook(textureKey: string) {
+    if (!this.player) return;
+    const body = this.player.body as Phaser.Physics.Arcade.Body;
+    if (isAnimatedHeroTexture(textureKey) && this.textures.exists(HERO_SHEET_KEY)) {
+      if (!this.heroAnimated) {
+        this.heroAnimated = true;
+        this.player.setTexture(HERO_SHEET_KEY, 0);
+        body.setSize(HERO_BODY.width, HERO_BODY.height, false);
+        body.setOffset(HERO_BODY.offsetX, HERO_BODY.offsetY);
+        this.player.anims.play(HERO_ANIM.idle, true);
+      }
+      return;
+    }
+    this.heroAnimated = false;
+    this.heroAction = null;
+    this.player.anims.stop();
+    this.player.setTexture(textureKey);
+    body.setSize(this.player.width, this.player.height, true);
+  }
+
+  /** Plays a one-shot hero animation (shoot / hurt / death) over walk/idle. */
+  private playHeroAction(key: string) {
+    if (!this.heroAnimated || this.heroAction === HERO_ANIM.death) return;
+    this.heroAction = key;
+    this.player.anims.play(key, false);
+  }
+
+  /** Shared "hero took damage" feedback: red flash plus the hurt animation. */
+  protected onPlayerHurt() {
+    this.fx.playerHurt(this.player);
+    if (this.heroAction !== HERO_ANIM.shoot) this.playHeroAction(HERO_ANIM.hurt);
   }
 
   protected playerDied() {
@@ -1137,6 +1197,7 @@ export default abstract class CombatScene extends Phaser.Scene {
     this.player.setVelocity(0);
     this.player.setTint(0x555753);
     this.player.body?.setEnable(false);
+    if (this.heroAnimated) this.playHeroAction(HERO_ANIM.death);
     audioManager.playSfx('playerDie');
     audioManager.stopMusic();
     gameBridge.emit('player_died', { zone: this.scene.key });

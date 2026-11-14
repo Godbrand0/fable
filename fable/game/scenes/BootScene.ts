@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { SKIN_PALETTES, SkinPalette } from '../../lib/skins';
 import { FIRST_ZONE_KEY } from '../../lib/zones';
+import { preloadHeroSheet, registerHeroAnims } from '../systems/heroSprite';
 
 export default class BootScene extends Phaser.Scene {
   constructor() {
@@ -23,10 +24,12 @@ export default class BootScene extends Phaser.Scene {
       yoyo: true,
       repeat: -1,
     });
+    preloadHeroSheet(this);
   }
 
   create() {
     this.createTextures();
+    registerHeroAnims(this);
     const target = this.game.registry.get('startZone') || FIRST_ZONE_KEY;
     this.scene.start(target);
   }
