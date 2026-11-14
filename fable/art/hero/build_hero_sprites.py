@@ -7,10 +7,13 @@ Steps: key out green -> shrink to game pixel size (SCALE source px per game px)
 -> one shared palette -> align every pose on the body -> build the in-between
 frames (idle breathing, walk leg-scissor, shoot recoil) -> 1px outline.
 
+Writes one sheet per weapon (hero_bamboo, hero_iron_sword, hero_ember_blade,
+hero_obsidian_gs): the bamboo staff from the stills is swapped for each weapon.
+
 Usage (needs Pillow + NumPy):
     python art/hero/build_hero_sprites.py art/hero/source /tmp/hero_out 8.75
-    cp /tmp/hero_out/hero_bamboo.png public/sprites/hero_bamboo.png
-Frame layout is written to hero_bamboo.json; keep game/systems/heroSprite.ts in sync.
+    cp /tmp/hero_out/hero_*.png public/sprites/
+Frame layout is written to hero_<weapon>.json; keep game/systems/heroSprite.ts in sync.
 """
 import sys, json
 from pathlib import Path
@@ -141,29 +144,105 @@ def step(fr, s):
             if 0 <= ty < FH: out[ty][m] = row[m]
     return out
 
-S = poses['shoot']
-frames = {
-    'idle':  [R, R, breathe(R, 1), breathe(R, 1)],
-    'walk':  [step(R, 3), breathe(step(R, 1), 1), step(R, -1), step(R, -3), breathe(step(R, -1), 1), step(R, 1)],
-    'shoot': [S, S, shift_rows(R, 0, WAIST, dx=-1), R],
-    'hurt':  [poses['hurt'], poses['hurt']],
-    'death': [poses['hurt'], poses['death']],
+# ── Weapons ────────────────────────────────────────────────────────────────
+# The stills hold a bamboo staff. For every other weapon the staff is erased
+# along its line and the weapon is drawn in its place. (grip, tip) per pose,
+# in frame pixels — re-measure these if SCALE or the stills change.
+STAFF = {
+    'ready': ((66, 32.5), (86, 29.5)),
+    'shoot': ((64, 33),   (80, 31.5)),
+    'hurt':  ((77, 32),   (95, 24)),
+    'death': ((53, 59.5), (75, 60.5)),
 }
-order = ['idle', 'walk', 'shoot', 'hurt', 'death']
-sheet_frames, meta, i = [], {}, 0
-for k in order:
-    meta[k] = list(range(i, i + len(frames[k]))); i += len(frames[k])
-    sheet_frames += [outline(f) for f in frames[k]]
 
-sheet = np.concatenate(sheet_frames, axis=1)
-Image.fromarray(sheet, 'RGBA').save(OUT / 'hero_bamboo.png')
-json.dump({'frameWidth': FW, 'frameHeight': FH, 'baseline': BASE_Y, 'waist': WAIST, 'anims': meta}, open(OUT / 'hero_bamboo.json', 'w'), indent=1)
+# Weapon look: blade length/width in px, and colors (edge, core, highlight, guard, accent).
+WEAPONS = {
+    'bamboo':       None,  # keep the staff from the stills
+    'iron_sword':   dict(length=21, width=3, guard=7, edge=(120, 130, 142), core=(196, 204, 214), shine=(240, 244, 248), hilt=(92, 70, 40), gem=None),
+    'ember_blade':  dict(length=23, width=3, guard=7, edge=(150, 30, 10), core=(255, 120, 40), shine=(255, 220, 140), hilt=(58, 26, 10), gem=(255, 70, 30)),
+    'obsidian_gs':  dict(length=28, width=4, guard=9, edge=(26, 22, 44), core=(60, 46, 96), shine=(170, 120, 255), hilt=(42, 34, 56), gem=(155, 92, 255)),
+}
 
-# Big preview on a checkerboard so it can be judged by eye
-prev = Image.fromarray(sheet, 'RGBA')
-bg = Image.new('RGBA', prev.size, (60, 60, 70, 255))
-chk = np.indices(prev.size[::-1]).sum(axis=0) % 2
-bg = Image.fromarray(np.dstack([np.where(chk, 70, 52)] * 3 + [np.full(chk.shape, 255)]).astype(np.uint8), 'RGBA')
-bg.alpha_composite(prev)
-bg.resize((prev.size[0] * 5, prev.size[1] * 5), Image.NEAREST).save(OUT / 'preview.png')
-print('frames', i, json.dumps(meta))
+def is_glow(px):
+    r, g, b = int(px[0]), int(px[1]), int(px[2])
+    return b > r + 30 and b > 120   # the blue magic flash in the shoot pose
+
+def swap_weapon(fr, seg, w):
+    if w is None:
+        return fr
+    out = fr.copy()
+    (gx, gy), (tx, ty) = seg
+    ux, uy = tx - gx, ty - gy
+    L = (ux * ux + uy * uy) ** 0.5
+    ux, uy = ux / L, uy / L
+    nx, ny = -uy, ux
+    # 1) Erase the staff (and its outline) along its line, starting just past the hand.
+    for y in range(FH):
+        for x in range(FW):
+            if out[y, x, 3] == 0 or is_glow(out[y, x]):
+                continue
+            dx, dy = x - gx, y - gy
+            t = dx * ux + dy * uy
+            d = abs(dx * nx + dy * ny)
+            if -0.5 <= t <= L + 2 and d <= 2.6:
+                out[y, x] = 0
+    # 2) Draw the weapon: crossguard at the grip, then a blade tapering to a point.
+    def put(x, y, c):
+        xi, yi = int(round(x)), int(round(y))
+        if 0 <= xi < FW and 0 <= yi < FH:
+            out[yi, xi] = (*c, 255)
+    half_g = w['guard'] / 2
+    s = -half_g
+    while s <= half_g:
+        for k in (0.5, 1.5):
+            put(gx + ux * k + nx * s, gy + uy * k + ny * s, w['hilt'])
+        s += 0.5
+    if w['gem']:
+        put(gx + ux * 1, gy + uy * 1, w['gem'])
+    half_w = (w['width'] - 1) / 2
+    # Shorten the blade if it would run off the frame (e.g. the hurt pose points up-right).
+    length = w['length']
+    while length > 6:
+        ex, ey = gx + ux * (2.5 + length), gy + uy * (2.5 + length)
+        if 1 <= ex <= FW - 2 and 1 <= ey <= FH - 2:
+            break
+        length -= 0.5
+    t = 2.5
+    while t <= 2.5 + length:
+        remaining = 2.5 + length - t
+        hw = half_w if remaining > 4 else half_w * remaining / 4   # taper the tip
+        s = -hw
+        while s <= hw + 1e-6:
+            edge = abs(abs(s) - hw) < 0.5 and hw > 0.6
+            col = w['edge'] if edge else w['core']
+            put(gx + ux * t + nx * s, gy + uy * t + ny * s, col)
+            s += 0.5
+        # a bright line along the blade's upper side
+        if hw > 0.6:
+            put(gx + ux * t - nx * (hw - 1), gy + uy * t - ny * (hw - 1), w['shine'])
+        t += 0.5
+    return out
+
+S0 = poses['shoot']
+for wname, w in WEAPONS.items():
+    R = swap_weapon(poses['ready'], STAFF['ready'], w)
+    S = swap_weapon(S0, STAFF['shoot'], w)
+    H = swap_weapon(poses['hurt'], STAFF['hurt'], w)
+    D = swap_weapon(poses['death'], STAFF['death'], w)
+    frames = {
+        'idle':  [R, R, breathe(R, 1), breathe(R, 1)],
+        'walk':  [step(R, 3), breathe(step(R, 1), 1), step(R, -1), step(R, -3), breathe(step(R, -1), 1), step(R, 1)],
+        'shoot': [S, S, shift_rows(R, 0, WAIST, dx=-1), R],
+        'hurt':  [H, H],
+        'death': [H, D],
+    }
+    order = ['idle', 'walk', 'shoot', 'hurt', 'death']
+    sheet_frames, meta, i = [], {}, 0
+    for k in order:
+        meta[k] = list(range(i, i + len(frames[k]))); i += len(frames[k])
+        sheet_frames += [outline(f) for f in frames[k]]
+    sheet = np.concatenate(sheet_frames, axis=1)
+    Image.fromarray(sheet).save(OUT / f'hero_{wname}.png')
+    json.dump({'frameWidth': FW, 'frameHeight': FH, 'baseline': BASE_Y, 'waist': WAIST, 'anims': meta},
+              open(OUT / f'hero_{wname}.json', 'w'), indent=1)
+    print(wname, 'frames', i)
