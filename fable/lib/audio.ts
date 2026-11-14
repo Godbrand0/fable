@@ -269,6 +269,26 @@ class AudioManager {
         break;
       }
 
+      // Player swings their weapon: a short filtered-noise whoosh that sweeps down
+      case 'slash': {
+        const dur = 0.12;
+        const size = Math.floor(ctx.sampleRate * dur);
+        const buf = ctx.createBuffer(1, size, ctx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < size; i++) data[i] = Math.random() * 2 - 1;
+        const src = ctx.createBufferSource(); src.buffer = buf;
+        const filt = ctx.createBiquadFilter(); filt.type = 'bandpass'; filt.Q.value = 1.4;
+        filt.frequency.setValueAtTime(2600, now);
+        filt.frequency.exponentialRampToValueAtTime(700, now + dur);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.001, now);
+        g.gain.exponentialRampToValueAtTime(0.5, now + 0.025);
+        g.gain.exponentialRampToValueAtTime(0.001, now + dur);
+        src.connect(filt); filt.connect(g); g.connect(this.sfxGain);
+        src.start(now); src.stop(now + dur);
+        break;
+      }
+
       // Projectile hits an enemy
       case 'hit': {
         const size = Math.floor(ctx.sampleRate * 0.07);

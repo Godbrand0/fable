@@ -5,7 +5,7 @@ pixel-art poses on a flat #00FF00 background, all with feet on the same baseline
 
 Steps: key out green -> shrink to game pixel size (SCALE source px per game px)
 -> one shared palette -> align every pose on the body -> build the in-between
-frames (idle breathing, walk leg-scissor, shoot recoil) -> 1px outline.
+frames (idle breathing, walk leg-scissor, weapon swing) -> 1px outline.
 
 Writes one sheet per weapon (hero_bamboo, hero_iron_sword, hero_ember_blade,
 hero_obsidian_gs): the bamboo staff from the stills is swapped for each weapon.
@@ -19,6 +19,8 @@ import sys, json
 from pathlib import Path
 import numpy as np
 from PIL import Image
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from swing import swing_frames
 
 SRC = Path(sys.argv[1]); OUT = Path(sys.argv[2]); OUT.mkdir(parents=True, exist_ok=True)
 SCALE = float(sys.argv[3]) if len(sys.argv) > 3 else 8.75   # source px per game px
@@ -226,13 +228,14 @@ def swap_weapon(fr, seg, w):
 S0 = poses['shoot']
 for wname, w in WEAPONS.items():
     R = swap_weapon(poses['ready'], STAFF['ready'], w)
-    S = swap_weapon(S0, STAFF['shoot'], w)
+    # Attack = a slash: the weapon swings around the hand (see art/swing.py).
+    W1, W2, W3 = swing_frames(S0, STAFF['shoot'][0], STAFF['shoot'][0], STAFF['shoot'][1], w)
     H = swap_weapon(poses['hurt'], STAFF['hurt'], w)
     D = swap_weapon(poses['death'], STAFF['death'], w)
     frames = {
         'idle':  [R, R, breathe(R, 1), breathe(R, 1)],
         'walk':  [step(R, 3), breathe(step(R, 1), 1), step(R, -1), step(R, -3), breathe(step(R, -1), 1), step(R, 1)],
-        'shoot': [S, S, shift_rows(R, 0, WAIST, dx=-1), R],
+        'shoot': [W1, W2, W3, W3],
         'hurt':  [H, H],
         'death': [H, D],
     }

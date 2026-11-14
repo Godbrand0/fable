@@ -154,7 +154,7 @@ export default function MenuPage({
     setPlayerData((prev: any) => {
       const updated = { ...prev, equippedWeapon: weaponId };
       dbService.savePlayer(updated);
-      gameBridge.emit('weapon_changed', { textureKey: getPlayerTextureKey(prev.skin, weaponId) });
+      gameBridge.emit('weapon_changed', { textureKey: getPlayerTextureKey(prev.skin, weaponId), weaponId });
       return updated;
     });
   };

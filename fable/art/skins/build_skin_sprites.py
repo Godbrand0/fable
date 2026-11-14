@@ -17,6 +17,8 @@ import sys, json
 from pathlib import Path
 import numpy as np
 from PIL import Image
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from swing import swing_frames
 
 SRC = Path(sys.argv[1]); OUT = Path(sys.argv[2]); OUT.mkdir(parents=True, exist_ok=True)
 MAPS = '--maps' in sys.argv
@@ -346,13 +348,14 @@ for skin, (poses, scale) in built.items():
     poses = {k: drop_specks(v, keep_glow=(k == 'shoot')) for k, v in poses.items()}
     for wname, w in WEAPONS.items():
         R = swap_weapon(poses['ready'], STAFF[skin]['ready'], w)
-        S = swap_weapon(poses['shoot'], STAFF[skin]['shoot'], w)
+        # Attack = a slash: the weapon swings around the hand (see art/swing.py).
+        W1, W2, W3 = swing_frames(poses['shoot'], *STAFF[skin]['shoot'], w)
         H = swap_weapon(poses['hurt'], STAFF[skin]['hurt'], w)
         D = swap_weapon(poses['death'], STAFF[skin]['death'], w)
         frames = {
             'idle':  [R, R, breathe(R, 1), breathe(R, 1)],
             'walk':  [sway(R, s, b) for s, b in gait],
-            'shoot': [S, S, S, R],
+            'shoot': [W1, W2, W3, W3],
             'hurt':  [H, H],
             'death': [H, D],
         }

@@ -33,7 +33,7 @@ export const heroAnim = (sheet: string, action: HeroAction) => `${sheet}_${actio
 const FRAMES: Record<HeroAction, { frames: number[]; frameRate: number; repeat: number }> = {
   idle:  { frames: [0, 1, 2, 3],          frameRate: 4,  repeat: -1 },
   walk:  { frames: [4, 5, 6, 7, 8, 9],    frameRate: 10, repeat: -1 },
-  shoot: { frames: [10, 11, 12, 13],      frameRate: 16, repeat: 0 },
+  shoot: { frames: [10, 11, 12, 13],      frameRate: 20, repeat: 0 },   // weapon swing: windup, mid, strike, hold
   hurt:  { frames: [14, 15],              frameRate: 10, repeat: 0 },
   death: { frames: [14, 16, 17],          frameRate: 6,  repeat: 0 },
 };

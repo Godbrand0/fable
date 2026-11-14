@@ -8,6 +8,7 @@ import { FIRST_ZONE_KEY } from '../../lib/zones';
 import ZoneFx from '../systems/ZoneFx';
 import { HERO_BODY, HeroAction, heroAnim, heroSheetFor } from '../systems/heroSprite';
 import { animateEnemy, playEnemyAction } from '../systems/enemySprite';
+import { registerSlashTextures, styleSlash, swingSwoosh, slashImpact, weaponIdFromTexture } from '../systems/weaponSlash';
 
 export interface EnemyConfig {
   key: string;
@@ -64,6 +65,8 @@ export default abstract class CombatScene extends Phaser.Scene {
   private shieldActive = false;
   private shieldCircle: Phaser.GameObjects.Arc | null = null;
   protected equippedWeaponAtk = 5;
+  /** Equipped weapon id — picks the slash colour/behaviour. */
+  protected equippedWeaponId = 'bamboo_stick';
   private playerSkin: string = DEFAULT_SKIN;
 
   // Keyboard
@@ -184,6 +187,7 @@ export default abstract class CombatScene extends Phaser.Scene {
         const def = data.stats?.defense || 0;
         const weapon = getWeaponCombatStats(data.equippedWeapon ?? 'bamboo_stick');
         this.equippedWeaponAtk = weapon.attack;
+        this.equippedWeaponId = data.equippedWeapon ?? 'bamboo_stick';
         this.playerDmg = computePlayerDamage(str, data.equippedWeapon ?? 'bamboo_stick');
         this.playerDefense = def;
         this.shootCooldown = computeShootCooldown(agi);
@@ -209,6 +213,7 @@ export default abstract class CombatScene extends Phaser.Scene {
     // Physics groups
     this.enemies = this.physics.add.group();
     this.playerProjectiles = this.physics.add.group();
+    registerSlashTextures(this);
     this.enemyProjectiles = this.physics.add.group();
     this.coins = this.physics.add.group();
     this.lootItems = this.physics.add.group();
@@ -287,7 +292,8 @@ export default abstract class CombatScene extends Phaser.Scene {
       this.cameras.main.fadeOut(400, 0, 0, 0);
       this.time.delayedCall(400, () => { this.scene.start(target); });
     });
-    const unsubW = gameBridge.on('weapon_changed', ({ textureKey }: any) => {
+    const unsubW = gameBridge.on('weapon_changed', ({ textureKey, weaponId }: any) => {
+      this.equippedWeaponId = weaponId ?? weaponIdFromTexture(textureKey);
       this.applyPlayerLook(textureKey);
     });
     // Pause menu: freeze/resume the running scene without destroying it
@@ -624,18 +630,23 @@ export default abstract class CombatScene extends Phaser.Scene {
     });
   }
 
+  /** The player's attack: swing the weapon and send a slash wave in its colour. */
   private shootProjectile(dx: number, dy: number) {
     const len = Math.sqrt(dx * dx + dy * dy);
-    const proj = this.playerProjectiles.create(this.player.x, this.player.y, 'projectile');
-    proj.setVelocity((dx / len) * 350, (dy / len) * 350);
+    const ux = dx / len, uy = dy / len;
+    const angle = Math.atan2(uy, ux);
+    if (dx < -0.1) this.player.setFlipX(true);
+    else if (dx > 0.1) this.player.setFlipX(false);
+
+    const proj = this.playerProjectiles.create(this.player.x + ux * 10, this.player.y + uy * 10, 'projectile');
+    const style = styleSlash(this, proj, this.equippedWeaponId, angle);
+    proj.setVelocity(ux * style.speed, uy * style.speed);
     proj.setDepth(8);
-    this.time.delayedCall(1500, () => { if (proj?.active) proj.destroy(); });
-    audioManager.playSfx('shoot');
-    if (this.heroAnimated) {
-      if (dx < -0.1) this.player.setFlipX(true);
-      else if (dx > 0.1) this.player.setFlipX(false);
-      this.playHeroAction('shoot');
-    }
+    this.time.delayedCall(style.life, () => { if (proj?.active) proj.destroy(); });
+
+    swingSwoosh(this, this.player.x, this.player.y, this.equippedWeaponId, angle, !this.player.flipX);
+    audioManager.playSfx('slash');
+    if (this.heroAnimated) this.playHeroAction('shoot');
   }
 
   private triggerActiveAbility() {
@@ -1178,17 +1189,44 @@ export default abstract class CombatScene extends Phaser.Scene {
   private damageEnemy(proj: any, enemy: any) {
     const hitFromX = proj.x - (proj.body?.velocity?.x ?? 0) * 0.05;
     const hitFromY = proj.y - (proj.body?.velocity?.y ?? 0) * 0.05;
-    proj.destroy();
 
+    // Slash waves: a piercing wave (obsidian) passes through a few enemies, hitting
+    // each one once; everything else stops on the first enemy it touches.
+    const hits: Set<any> | undefined = proj.getData?.('hits');
+    if (hits?.has(enemy)) return;
+    hits?.add(enemy);
+    const pierceLeft = proj.getData?.('pierce') ?? 0;
+    const color = proj.getData?.('slashColor');
+    const burn = !!proj.getData?.('burn');
+    if (pierceLeft > 0) proj.setData('pierce', pierceLeft - 1);
+    else proj.destroy();
+    if (color !== undefined) slashImpact(this, enemy.x, enemy.y, color);
+
+    const dmg = this.applyEnemyDamage(enemy, this.playerDmg, hitFromX, hitFromY);
+    // Ember blade: the enemy burns for two small extra ticks.
+    if (burn && dmg > 0) {
+      const tick = Math.max(1, Math.round(dmg * 0.2));
+      [450, 900].forEach((ms) => this.time.delayedCall(ms, () => {
+        if (!enemy.active || enemy.getData('hp') <= 0) return;
+        slashImpact(this, enemy.x, enemy.y, 0xFF7A1A);
+        this.applyEnemyDamage(enemy, tick, enemy.x, enemy.y, '#FFA040');
+      }));
+    }
+  }
+
+  /** Deals damage to an enemy (shared by direct hits and damage over time). Returns the damage dealt. */
+  private applyEnemyDamage(enemy: any, baseDmg: number, hitFromX: number, hitFromY: number, textColor = '#FFFFFF'): number {
+    if (!enemy.active) return 0;
     let hp = enemy.getData('hp');
+    if (hp <= 0) return 0;
     const maxHp = enemy.getData('maxHp');
-    let dmg = this.playerDmg;
+    let dmg = baseDmg;
     if (enemy.texture.key === 'obsidian_golem') dmg = Math.floor(dmg * 0.8);
     hp -= dmg;
     enemy.setData('hp', hp);
 
     audioManager.playSfx('hit');
-    this.showFloatingText(enemy.x, enemy.y - 12, `${dmg}`, '#FFFFFF');
+    this.showFloatingText(enemy.x, enemy.y - 12, `${dmg}`, textColor);
     this.fx.enemyHit(enemy, hitFromX, hitFromY);
     playEnemyAction(enemy, 'hurt');
 
@@ -1211,6 +1249,7 @@ export default abstract class CombatScene extends Phaser.Scene {
         this.defeatEnemy(enemy);
       }
     }
+    return dmg;
   }
 
   // fromNetwork=true means another client already resolved this kill and we're just

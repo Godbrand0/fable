@@ -260,7 +260,7 @@ export default class ZoneFx {
     this.trailTick = (this.trailTick + 1) % 2;
     if (this.trailTick === 0) {
       for (const p of playerShots as any[]) {
-        if (p.active) { this.trail.particleTint = 0x9FD0FF; this.trail.emitParticleAt(p.x, p.y, 1); }
+        if (p.active) { this.trail.particleTint = p.getData?.('trail') ?? 0x9FD0FF; this.trail.emitParticleAt(p.x, p.y, 1); }
       }
       for (const p of enemyShots as any[]) {
         if (p.active) { this.trail.particleTint = this.atm.enemyShot; this.trail.emitParticleAt(p.x, p.y, 1); }
