@@ -136,10 +136,11 @@ export default class StormspireRuinsScene extends CombatScene {
 
       const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, tx, ty);
       if (dist < STRIKE_RADIUS) {
-        this.playerHP = Math.max(0, this.playerHP - STRIKE_DAMAGE);
+        const strike = this.scaleDamageTaken(STRIKE_DAMAGE);
+        this.playerHP = Math.max(0, this.playerHP - strike);
         this.cameras.main.shake(150, 0.012);
         this.cameras.main.flash(100, 255, 240, 120);
-        this.showFloatingText(this.player.x, this.player.y - 12, `-${STRIKE_DAMAGE} LIGHTNING`, '#FFE45C');
+        this.showFloatingText(this.player.x, this.player.y - 12, `-${strike} LIGHTNING`, '#FFE45C');
         this.onPlayerHurt();
         gameBridge.emit('player_health_changed', { hp: this.playerHP });
         if (this.playerHP <= 0) this.playerDied();

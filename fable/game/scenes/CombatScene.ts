@@ -8,6 +8,7 @@ import { FIRST_ZONE_KEY } from '../../lib/zones';
 import ZoneFx from '../systems/ZoneFx';
 import { HERO_BODY, HeroAction, heroAnim, heroSheetFor } from '../systems/heroSprite';
 import { animateEnemy, playEnemyAction } from '../systems/enemySprite';
+import { getDifficulty } from '../../lib/difficulty';
 import { registerSlashTextures, styleSlash, swingSwoosh, slashImpact, weaponIdFromTexture } from '../systems/weaponSlash';
 
 export interface EnemyConfig {
@@ -31,10 +32,10 @@ const BOSS_WINDUP_MS = 750;         // warning time before a charge
 const BOSS_CHARGE_SPEED = 420;
 const BOSS_CHARGE_MS = 600;
 // Order the boss cycles through its attacks: its zone pattern twice per cycle,
-// mixed with aimed, curving and splitting shots.
-const BOSS_ATTACK_CYCLE = ['pattern', 'aimed', 'curve', 'pattern', 'split'] as const;
+// mixed with aimed and splitting shots.
+const BOSS_ATTACK_CYCLE = ['pattern', 'aimed', 'pattern', 'split'] as const;
 
-type EnemyShotOpts = { dmg?: number; home?: number; split?: number; splitCount?: number; big?: boolean };
+type EnemyShotOpts = { dmg?: number; split?: number; splitCount?: number; big?: boolean };
 
 export default abstract class CombatScene extends Phaser.Scene {
   protected player!: Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
@@ -370,7 +371,7 @@ export default abstract class CombatScene extends Phaser.Scene {
     const unsubEnemyShot = gameBridge.on('mp_in_enemy_shot', (data: any) => {
       if (!this.isMultiplayer || this.isSpawnAuthority) return;
       this.createEnemyProjectile(data.x, data.y, data.vx, data.vy, data.life ?? 2000, {
-        dmg: data.dmg, home: data.home, split: data.split, splitCount: data.splitCount, big: data.big,
+        dmg: data.dmg, split: data.split, splitCount: data.splitCount, big: data.big,
       });
     });
 
@@ -578,7 +579,6 @@ export default abstract class CombatScene extends Phaser.Scene {
       });
     }
     // Curving shots bend toward this client's own player, on every client.
-    this.steerHomingShots();
 
     if (this.shieldCircle) {
       this.shieldCircle.setPosition(this.player.x, this.player.y);
@@ -802,7 +802,7 @@ export default abstract class CombatScene extends Phaser.Scene {
     const bossY = WORLD_H * 0.25;
     // Each returning life comes back tougher (bossHpMultiplierPerPhase === 1 outside
     // multiplayer, so single-player HP is unaffected).
-    const scaledHp = Math.round(this.bossConfig.hp * Math.pow(this.bossHpMultiplierPerPhase, this.bossPhaseIndex));
+    const scaledHp = Math.round(this.bossConfig.hp * Math.pow(this.bossHpMultiplierPerPhase, this.bossPhaseIndex) * getDifficulty().bossHp);
     // A fresh id per phase — the previous phase's id is already gone from enemyById
     // (see resolveBossPhaseDefeat), so this can't collide with a stale entry.
     const netId = this.isMultiplayer ? `boss${this.bossPhaseIndex}` : '';
@@ -886,7 +886,6 @@ export default abstract class CombatScene extends Phaser.Scene {
 
   // Creates an enemy projectile on this client only. Options:
   //  - dmg:   damage on hit (falls back to the old boss/minion rule when absent)
-  //  - home:  ms during which the shot bends toward this client's player
   //  - split: ms after which the shot bursts into `splitCount` smaller shots
   //  - big:   drawn (and collides) larger — used for splitting orbs
   // Everything is deterministic from these values, so every client reproduces the
@@ -896,7 +895,6 @@ export default abstract class CombatScene extends Phaser.Scene {
     proj.setVelocity(vx, vy);
     proj.setDepth(7);
     if (opts.dmg) proj.setData('dmg', opts.dmg);
-    if (opts.home) proj.setData('homeUntil', this.time.now + opts.home);
     if (opts.big) proj.setScale(2.2);
     this.time.delayedCall(life, () => { if (proj?.active) proj.destroy(); });
     if (opts.split) {
@@ -927,55 +925,40 @@ export default abstract class CombatScene extends Phaser.Scene {
     return proj;
   }
 
-  /** Turns curving shots toward the local player while their homing window lasts. */
-  private steerHomingShots() {
-    if (!this.player?.active || this.playerDead) return;
-    const now = this.time.now;
-    const turn = 2.4 * (this.game.loop.delta / 1000); // rad per frame
-    this.enemyProjectiles.getChildren().forEach((p: any) => {
-      if (!p.active) return;
-      const until = p.getData('homeUntil');
-      if (!until || now > until) return;
-      const v = p.body.velocity;
-      const speed = Math.hypot(v.x, v.y);
-      const cur = Math.atan2(v.y, v.x);
-      const want = Phaser.Math.Angle.Between(p.x, p.y, this.player.x, this.player.y);
-      const next = Phaser.Math.Angle.RotateTo(cur, want, turn);
-      p.setVelocity(Math.cos(next) * speed, Math.sin(next) * speed);
-    });
-  }
-
   /**
    * Boss behaviour, run by the spawn authority only:
    *  - strafes around its target at mid range, switching direction every few seconds
    *  - every ~8 s winds up (red warning line) and charges through where you stood
    *  - cycles through attacks: its zone pattern (with random gaps), shots aimed where
-   *    you're heading, curving shots, and an orb that bursts into a ring
+   *    you're heading, and an orb that bursts into a ring
    *  - every 30 s pushes two minions out of its body that chase you anywhere
    *  - below half HP it enrages: faster, fires more often, summons every 20 s
+   * The timings above are Hard; the player's difficulty (lib/difficulty.ts) slows
+   * and softens them on Normal and Easy.
    */
   private runBossAI(boss: any, time: number) {
     const target = this.isMultiplayer ? this.nearestTarget(boss.x, boss.y) : this.player;
     const angle = Phaser.Math.Angle.Between(boss.x, boss.y, target.x, target.y);
     const dist = Phaser.Math.Distance.Between(boss.x, boss.y, target.x, target.y);
 
+    const diff = getDifficulty();
     if (!boss.getData('aiInit')) {
       boss.setData({
         aiInit: true,
         mode: 'strafe',
         strafeDir: Math.random() < 0.5 ? -1 : 1,
         nextStrafeFlip: time + Phaser.Math.Between(1800, 3600),
-        nextCharge: time + Phaser.Math.Between(5000, 8000),
+        nextCharge: time + Phaser.Math.Between(5000, 8000) * diff.bossChargeInterval,
         nextSummon: time + 8000, // first summon comes early so the player can't settle in
         attackStep: 0,
         lastShot: time - 600,
       });
     }
 
-    const enraged = boss.getData('hp') <= boss.getData('maxHp') * 0.5;
+    const enraged = diff.enrage && boss.getData('hp') <= boss.getData('maxHp') * 0.5;
     if (enraged && !boss.getData('enraged')) this.enrageBoss(boss);
     const rage = enraged ? 1.3 : 1;
-    const slow = boss.getData('isSlowed') ? 0.5 : 1;
+    const slow = (boss.getData('isSlowed') ? 0.5 : 1) * diff.bossSpeed;
     const mode = boss.getData('mode');
 
     if (boss.getData('animKey') && mode !== 'charge') boss.setFlipX(target.x < boss.x); // animated art faces right
@@ -993,7 +976,7 @@ export default abstract class CombatScene extends Phaser.Scene {
     } else if (mode === 'charge') {
       if (time >= boss.getData('modeUntil')) {
         boss.setVelocity(0, 0);
-        boss.setData({ mode: 'strafe', nextCharge: time + Phaser.Math.Between(7000, 10000) / rage });
+        boss.setData({ mode: 'strafe', nextCharge: time + Phaser.Math.Between(7000, 10000) * diff.bossChargeInterval / rage });
       }
     } else {
       if (time >= boss.getData('nextStrafeFlip')) {
@@ -1020,12 +1003,13 @@ export default abstract class CombatScene extends Phaser.Scene {
     // ── Summons ─────────────────────────────────────────────────────────────
     if (time >= boss.getData('nextSummon')) {
       this.summonMinions(boss);
-      boss.setData('nextSummon', time + (enraged ? this.bossSummonInterval * 2 / 3 : this.bossSummonInterval));
+      const every = Math.max(this.bossSummonInterval, diff.summonInterval);
+      boss.setData('nextSummon', time + (enraged ? every * 2 / 3 : every));
     }
 
     // ── Attacks (not while winding up or charging) ──────────────────────────
     const pattern = this.bossAttackPattern();
-    const interval = pattern.interval * (enraged ? 0.75 : 1);
+    const interval = pattern.interval * (enraged ? 0.75 : 1) * diff.bossAttackInterval;
     if (mode !== 'strafe' || time <= boss.getData('lastShot') + interval) return;
 
     const dmg = this.bossConfig.damage;
@@ -1054,13 +1038,6 @@ export default abstract class CombatScene extends Phaser.Scene {
       const aim = Phaser.Math.Angle.Between(boss.x, boss.y, target.x + tv.x * t, target.y + tv.y * t);
       const spread = enraged ? [-0.3, -0.15, 0, 0.15, 0.3] : [-0.16, 0, 0.16];
       spread.forEach(s => this.fireEnemyProjectile(boss.x, boss.y, Math.cos(aim + s) * speed, Math.sin(aim + s) * speed, 2500, { dmg }));
-    } else if (kind === 'curve') {
-      // A wide fan whose shots bend back toward the player for about a second.
-      const n = enraged ? 7 : 5;
-      for (let i = 0; i < n; i++) {
-        const a = angle + (i - (n - 1) / 2) * 0.45;
-        this.fireEnemyProjectile(boss.x, boss.y, Math.cos(a) * 170, Math.sin(a) * 170, 2800, { dmg, home: 1000 });
-      }
     } else {
       // A slow, big orb that bursts into a ring near the player.
       const a = angle + Phaser.Math.FloatBetween(-0.15, 0.15);
@@ -1084,7 +1061,7 @@ export default abstract class CombatScene extends Phaser.Scene {
 
   private summonMinions(boss: any) {
     const alive = this.enemies.getChildren().filter((e: any) => e.active && e.getData('summoned')).length;
-    const n = Math.min(this.bossSummonCount, this.bossSummonCap - alive);
+    const n = Math.min(this.bossSummonCount, getDifficulty().summonCount, this.bossSummonCap - alive);
     if (n <= 0) return;
     playEnemyAction(boss, 'attack');
     this.cameras.main.shake(150, 0.006);
@@ -1404,7 +1381,7 @@ export default abstract class CombatScene extends Phaser.Scene {
 
     // Shots carry their shooter's damage, so minion shots stay minion-strength during the boss fight.
     const rawDmg = shotDmg ?? (this.bossSpawned ? this.bossConfig.damage : this.regularEnemyConfig.damage);
-    const dmg = Math.max(1, rawDmg - (this.playerDefense * 3));
+    const dmg = this.scaleDamageTaken(rawDmg - (this.playerDefense * 3));
     this.playerHP = Math.max(0, this.playerHP - dmg);
 
     audioManager.playSfx('playerHurt');
@@ -1416,6 +1393,11 @@ export default abstract class CombatScene extends Phaser.Scene {
     if (this.playerHP <= 0) this.playerDied();
   }
 
+  /** Applies the chosen difficulty to damage the player is about to take (at least 1). */
+  protected scaleDamageTaken(raw: number): number {
+    return Math.max(1, Math.round(raw * getDifficulty().damageTaken));
+  }
+
   // overlap(enemies, player, cb) → same Phaser rule → cb(player, enemy)
   private collidePlayerEnemy(player: any, enemy: any) {
     if (this.playerDead) return;
@@ -1424,7 +1406,7 @@ export default abstract class CombatScene extends Phaser.Scene {
     const now = this.time.now;
     if (now > lastDmgTime + 900) {
       const rawDmg = enemy.isBoss ? this.bossConfig.damage : this.regularEnemyConfig.damage;
-      const dmg = Math.max(1, rawDmg - (this.playerDefense * 3));
+      const dmg = this.scaleDamageTaken(rawDmg - (this.playerDefense * 3));
       this.playerHP = Math.max(0, this.playerHP - dmg);
       audioManager.playSfx('playerHurt');
       this.cameras.main.flash(100, 150, 0, 0);

@@ -20,6 +20,7 @@ import gameBridge from '../game/systems/GameBridge';
 import { GD_ITEMS } from '../lib/nft';
 import { getPlayerTextureKey } from '../lib/combatFormulas';
 import { ZONES, ZONE_COUNT } from '../lib/zones';
+import { DIFFICULTIES, DIFFICULTY_ORDER, DifficultyId, getDifficultyId, setDifficulty } from '../lib/difficulty';
 
 type Section = 'nav' | 'tavern' | 'bank' | 'marketplace' | 'multiplayer' | 'leaderboard' | 'stats' | 'profile' | 'codex' | 'loadout' | 'settings';
 
@@ -65,6 +66,9 @@ export default function MenuPage({
   const [addressCopied, setAddressCopied] = useState(false);
   const [musicOn, setMusicOn]         = useState(true);
   const [sfxOn, setSfxOn]             = useState(true);
+  const [difficulty, setDifficultyState] = useState<DifficultyId>('normal');
+  // Read the saved choice after mount (localStorage isn't available during server render).
+  useEffect(() => { setDifficultyState(getDifficultyId()); }, []);
   const [message, setMessage]         = useState<string | null>(null);
   const [selectedNft, setSelectedNft] = useState<any | null>(null);
   const [showStarterWeapon, setShowStarterWeapon] = useState(false);
@@ -493,6 +497,29 @@ export default function MenuPage({
                       {sfxOn ? '🔊 SFX On' : '🔇 SFX Off'}
                     </button>
                   </div>
+
+                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mt-2">Difficulty</span>
+                  <div className="flex gap-2" role="radiogroup" aria-label="Difficulty">
+                    {DIFFICULTY_ORDER.map((id) => {
+                      const active = difficulty === id;
+                      return (
+                        <button
+                          key={id}
+                          role="radio"
+                          aria-checked={active}
+                          onClick={() => {
+                            setDifficulty(id);
+                            setDifficultyState(id);
+                            audioManager.playSfx('click');
+                          }}
+                          className={`flex-1 px-3 py-3 rounded-lg text-xs font-bold border ${active ? 'text-yellow-400 border-yellow-800 bg-yellow-950/20' : 'text-zinc-600 border-zinc-800'}`}
+                        >
+                          {DIFFICULTIES[id].label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[11px] text-zinc-500">{DIFFICULTIES[difficulty].blurb}.</p>
                 </div>
               )}
 
