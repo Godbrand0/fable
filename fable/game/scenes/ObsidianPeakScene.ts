@@ -192,6 +192,7 @@ export default class ObsidianPeakScene extends CombatScene {
           this.cameras.main.shake(160, 0.015);
           this.cameras.main.flash(100, 150, 0, 0);
           this.showFloatingText(this.player.x, this.player.y - 12, '-25 METEOR', '#EF2929');
+          this.onPlayerHurt();
           gameBridge.emit('player_health_changed', { hp: this.playerHP });
           if (this.playerHP <= 0) this.playerDied();
         }
