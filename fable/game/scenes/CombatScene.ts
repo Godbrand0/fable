@@ -7,6 +7,7 @@ import RemotePartyMember from '../systems/RemotePartyMember';
 import { FIRST_ZONE_KEY } from '../../lib/zones';
 import ZoneFx from '../systems/ZoneFx';
 import { HERO_BODY, HeroAction, heroAnim, heroSheetFor } from '../systems/heroSprite';
+import { animateEnemy, playEnemyAction } from '../systems/enemySprite';
 
 export interface EnemyConfig {
   key: string;
@@ -729,6 +730,7 @@ export default abstract class CombatScene extends Phaser.Scene {
       enemy.setData('netId', netId);
       this.enemyById.set(netId, enemy);
     }
+    animateEnemy(this, enemy, config.key);
     this.fx.enemySpawned(enemy);
     if (isBoss) this.fx.bossSpawned(enemy);
     return enemy;
@@ -842,6 +844,7 @@ export default abstract class CombatScene extends Phaser.Scene {
     if (time > lastShot + 2200 && dist < 200) {
       this.fireEnemyProjectile(enemy.x, enemy.y, Math.cos(angle) * 160, Math.sin(angle) * 160);
       enemy.setData('lastShot', time);
+      playEnemyAction(enemy, 'attack');
     }
   }
 
@@ -862,6 +865,7 @@ export default abstract class CombatScene extends Phaser.Scene {
     const target = this.isMultiplayer ? this.nearestTarget(boss.x, boss.y) : this.player;
     const angle = Phaser.Math.Angle.Between(boss.x, boss.y, target.x, target.y);
     const speed = boss.getData('isSlowed') ? this.bossConfig.speed * 0.5 : this.bossConfig.speed;
+    if (boss.getData('animKey')) boss.setFlipX(target.x < boss.x);   // animated art faces right
     boss.setVelocity(
       Math.cos(angle) * speed,
       Math.sin(angle) * speed
@@ -883,6 +887,7 @@ export default abstract class CombatScene extends Phaser.Scene {
         this.fireEnemyProjectile(boss.x, boss.y, Math.cos(a) * pattern.speed, Math.sin(a) * pattern.speed, 2500);
       }
       if (pattern.shape === 'spiral') boss.setData('spiralOffset', spiralOffset + 0.35);
+      playEnemyAction(boss, 'attack');
 
       if (pattern.shakeChance > 0 && Math.random() < pattern.shakeChance) {
         this.cameras.main.shake(200, 0.01);
@@ -962,6 +967,7 @@ export default abstract class CombatScene extends Phaser.Scene {
     audioManager.playSfx('hit');
     this.showFloatingText(enemy.x, enemy.y - 12, `${dmg}`, '#FFFFFF');
     this.fx.enemyHit(enemy, hitFromX, hitFromY);
+    playEnemyAction(enemy, 'hurt');
 
     const netId = enemy.getData('netId');
     if (this.isMultiplayer && netId) {
@@ -1058,7 +1064,7 @@ export default abstract class CombatScene extends Phaser.Scene {
     const oldNetId = this.bossInstance.getData('netId');
     if (oldNetId) this.enemyById.delete(oldNetId);
     if (this.bossHpBar) { this.bossHpBar.destroy(); this.bossHpBar = null; }
-    if (this.bossInstance.active) this.bossInstance.destroy();
+    if (this.bossInstance.active) { this.fx.enemyCorpse(this.bossInstance); this.bossInstance.destroy(); }
     this.bossInstance = null;
     this.fx.bossDied(x, y);
     this.bossLivesRemaining--;

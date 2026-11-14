@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { enemyAnimKey } from './enemySprite';
 
 // Visual polish shared by every combat zone: particles, hit/death feedback,
 // projectile trails, player motion, and per-zone lighting (vignette, colour
@@ -276,8 +277,10 @@ export default class ZoneFx {
     s.tweens.add({ targets: enemy, scaleX: targetScale, scaleY: targetScale, alpha: 1, duration: 260, ease: 'Back.easeOut' });
     this.smoke.explode(6, enemy.x, enemy.y + enemy.displayHeight / 3);
 
-    // Idle life: regular enemies sway, bosses breathe.
-    if (enemy.isBoss) {
+    // Idle life: regular enemies sway, bosses breathe (animated sheets move on their own).
+    if (enemy.getData?.('animKey')) {
+      // nothing — the sheet's move animation already bobs/flaps
+    } else if (enemy.isBoss) {
       s.tweens.add({ targets: enemy, scaleX: targetScale * 1.04, scaleY: targetScale * 0.97, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: 300 });
     } else {
       s.tweens.add({ targets: enemy, angle: { from: -5, to: 5 }, duration: 260 + Math.random() * 120, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
@@ -298,9 +301,29 @@ export default class ZoneFx {
     }
   }
 
-  /** Death: a ghost copy spins, shrinks and fades while sparks and smoke burst out. */
+  /** Animated enemies leave a corpse that plays its death animation, then fades out. */
+  enemyCorpse(enemy: any): boolean {
+    const key = enemy?.getData?.('animKey');
+    if (!key) return false;
+    const s = this.scene;
+    const corpse = s.add.sprite(enemy.x, enemy.y, enemy.texture.key, enemy.frame.name)
+      .setFlipX(enemy.flipX).setDepth(enemy.depth - 0.5).setScale(enemy.scaleX);
+    corpse.play(enemyAnimKey(key, 'death'));
+    corpse.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
+      s.tweens.add({ targets: corpse, alpha: 0, delay: 500, duration: 500, onComplete: () => corpse.destroy() });
+    });
+    return true;
+  }
+
+  /** Death: animated enemies play their death animation; others leave a ghost copy that
+   *  spins, shrinks and fades. Sparks and smoke either way. */
   enemyDied(enemy: any) {
     const s = this.scene;
+    if (this.enemyCorpse(enemy)) {
+      this.sparks.explode(10, enemy.x, enemy.y);
+      this.smoke.explode(6, enemy.x, enemy.y);
+      return;
+    }
     const ghost = s.add.image(enemy.x, enemy.y, enemy.texture.key)
       .setFlipX(enemy.flipX).setDepth(enemy.depth).setScale(enemy.scaleX);
     ghost.setTint(0xFFFFFF).setTintMode(Phaser.TintModes.FILL);
