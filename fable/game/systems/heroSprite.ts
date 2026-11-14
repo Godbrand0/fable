@@ -1,21 +1,21 @@
 import Phaser from 'phaser';
 
-// Animated hero sprite sheets (human skin), one per weapon, built from the
-// stills in art/hero/source by art/hero/build_hero_sprites.py. Frame indices
-// must match the hero_<weapon>.json files that script writes.
-//
-// Other skins still use the single static textures drawn in BootScene until
-// they get their own stills.
+// Animated hero sprite sheets, one per skin × weapon, all with the same 18-frame
+// layout. Human: art/hero/build_hero_sprites.py; Stone-kin and Ember-kin:
+// art/skins/build_skin_sprites.py. A skin/weapon without a sheet falls back to
+// the static texture drawn in BootScene.
 
 export const HERO_FRAME = { width: 96, height: 64 };
 
 /** Static texture key (as returned by getPlayerTextureKey) → animated sheet key. */
+const WEAPON_SUFFIXES = ['bamboo', 'iron_sword', 'ember_blade', 'obsidian_gs'];
+const ANIMATED_SKINS = ['obsidian', 'ember']; // Stone-kin and Ember-kin (art/skins)
 const SHEET_FOR_TEXTURE: Record<string, string> = {
   player: 'hero_bamboo',
-  player_bamboo: 'hero_bamboo',
-  player_iron_sword: 'hero_iron_sword',
-  player_ember_blade: 'hero_ember_blade',
-  player_obsidian_gs: 'hero_obsidian_gs',
+  // human skin: 'player_<weapon>' → 'hero_<weapon>'
+  ...Object.fromEntries(WEAPON_SUFFIXES.map(w => [`player_${w}`, `hero_${w}`])),
+  // other skins: '<skin>_<weapon>' → 'hero_<skin>_<weapon>'
+  ...Object.fromEntries(ANIMATED_SKINS.flatMap(sk => WEAPON_SUFFIXES.map(w => [`${sk}_${w}`, `hero_${sk}_${w}`]))),
 };
 const SHEETS = Array.from(new Set(Object.values(SHEET_FOR_TEXTURE)));
 
