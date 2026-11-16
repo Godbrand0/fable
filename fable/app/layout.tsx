@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Fable RPG",
-  description: "Volcanic Action RPG on Celo",
+  description: "A volcanic action RPG on Celo: slash through six cursed lands, beat bosses that fight back, claim free G$ daily and forge gear you truly own.",
   icons: {
     icon: "/logo.png",
     apple: "/logo.png",

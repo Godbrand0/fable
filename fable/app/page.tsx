@@ -27,6 +27,11 @@ const GameContainer = dynamic(() => import('../components/GameContainer'), {
 type Phase = 'splash' | 'auth' | 'creating' | 'menu' | 'playing';
 type AuthTab = 'google' | 'username';
 
+// Short pitch shown under the title on the loading and sign-in screens.
+const GAME_PITCH =
+  'Swing your blade through six cursed lands, outfight bosses that fight back, and claim free G$ every day to forge gear you truly own.';
+const GAME_HIGHLIGHTS = ['⚔️ 6 zones, 6 bosses', '💚 Free daily G$ UBI', '🗡️ Weapons you own as NFTs', '👥 Co-op with friends'];
+
 export default function Home() {
   const [phase, setPhase]         = useState<Phase>('splash');
   const [progress, setProgress]   = useState(0);
@@ -218,11 +223,17 @@ export default function Home() {
           <Image src="/banner.png" alt="Fable RPG" width={1024} height={341}
             className="w-full rounded-xl shadow-2xl shadow-amber-900/30" priority />
         </div>
-        <div className="mt-6 text-center flex flex-col items-center gap-1">
+        <div className="mt-6 px-6 text-center flex flex-col items-center gap-1">
           <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-linear-to-r from-yellow-400 to-amber-500 tracking-widest uppercase">
             Fable RPG
           </h1>
           <p className="text-xs text-zinc-500 tracking-widest uppercase">Volcanic Action RPG on Celo</p>
+          <p className="mt-3 max-w-sm text-sm leading-relaxed text-zinc-300">{GAME_PITCH}</p>
+          <ul className="mt-3 flex flex-wrap justify-center gap-2 text-[11px] text-zinc-400">
+            {GAME_HIGHLIGHTS.map((h) => (
+              <li key={h} className="px-2.5 py-1 rounded-full border border-zinc-800 bg-zinc-900/60">{h}</li>
+            ))}
+          </ul>
         </div>
         <div className="mt-8 w-full max-w-xs px-6 flex flex-col items-center gap-2">
           <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
@@ -249,6 +260,7 @@ export default function Home() {
               Fable RPG
             </h1>
             <p className="text-[10px] text-zinc-600 uppercase tracking-widest">Volcanic Action RPG on Celo</p>
+            <p className="mt-2 text-xs leading-relaxed text-zinc-400">{GAME_PITCH}</p>
           </div>
 
           {/* Card */}
