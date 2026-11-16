@@ -9,6 +9,7 @@ import { audioManager } from '../lib/audio';
 import HUD from '../components/HUD';
 import MenuPage from '../components/MenuPage';
 import SkinPicker from '../components/SkinPicker';
+import SplashSlides, { GAME_PITCH, SPLASH_SLIDES } from '../components/SplashSlides';
 import gameBridge from '../game/systems/GameBridge';
 import { DEFAULT_SKIN } from '../lib/skins';
 import { Wallet2, User, Loader2, AlertTriangle } from 'lucide-react';
@@ -26,10 +27,6 @@ const GameContainer = dynamic(() => import('../components/GameContainer'), {
 
 type Phase = 'splash' | 'auth' | 'creating' | 'menu' | 'playing';
 type AuthTab = 'google' | 'username';
-
-// Short pitch shown under the title on the loading and sign-in screens.
-const GAME_PITCH =
-  'Swing your blade through six cursed lands, outfight bosses that fight back, and claim free G$ every day to forge gear you truly own.';
 
 export default function Home() {
   const [phase, setPhase]         = useState<Phase>('splash');
@@ -55,9 +52,10 @@ export default function Home() {
   // In-game pause menu (overlays GameContainer + HUD without unmounting them)
   const [showPauseMenu, setShowPauseMenu] = useState(false);
 
-  // Splash: 10s progress bar → auth screen
+  // Splash: progress bar → auth screen. Long enough to read the slides
+  // (about 4.5 s each) at least once.
   useEffect(() => {
-    const DURATION = 10000;
+    const DURATION = SPLASH_SLIDES.length * 4500;
     const INTERVAL = 80;
     let elapsed = 0;
     const timer = setInterval(() => {
@@ -222,14 +220,15 @@ export default function Home() {
           <Image src="/banner.png" alt="Fable RPG" width={1024} height={341}
             className="w-full rounded-xl shadow-2xl shadow-amber-900/30" priority />
         </div>
-        <div className="mt-6 px-6 text-center flex flex-col items-center gap-1">
+        <div className="mt-6 px-6 text-center flex flex-col items-center">
           <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-linear-to-r from-yellow-400 to-amber-500 tracking-widest uppercase">
             Fable RPG
           </h1>
-          <p className="text-xs text-zinc-500 tracking-widest uppercase">Volcanic Action RPG on Celo</p>
-          <p className="mt-3 max-w-sm text-sm leading-relaxed text-zinc-300">{GAME_PITCH}</p>
         </div>
-        <div className="mt-8 w-full max-w-xs px-6 flex flex-col items-center gap-2">
+        <div className="mt-5 w-full flex justify-center">
+          <SplashSlides />
+        </div>
+        <div className="mt-6 w-full max-w-xs px-6 flex flex-col items-center gap-2">
           <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
             <div className="h-full bg-linear-to-r from-yellow-500 to-amber-400 rounded-full transition-none"
               style={{ width: `${progress}%` }} />
@@ -253,7 +252,6 @@ export default function Home() {
             <h1 className="text-2xl font-extrabold text-transparent bg-clip-text bg-linear-to-r from-yellow-400 to-amber-500 tracking-widest uppercase">
               Fable RPG
             </h1>
-            <p className="text-[10px] text-zinc-600 uppercase tracking-widest">Volcanic Action RPG on Celo</p>
             <p className="mt-2 text-xs leading-relaxed text-zinc-400">{GAME_PITCH}</p>
           </div>
 
