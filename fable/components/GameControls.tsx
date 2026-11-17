@@ -38,12 +38,15 @@ export default function GameControls() {
           <Joystick type="left" label="Move" />
         </div>
 
-        {/* Center Ability */}
-        <div className="flex flex-col items-center gap-4 pointer-events-auto">
+        {/* Right: Ability button sits right above the Aim/Shoot stick, so the
+            thumb that aims can tap it without crossing the screen. gap-9 leaves room
+            for the stick's label, which hangs 24px above it (absolute, no layout space). */}
+        <div className="flex flex-col items-center gap-9 pointer-events-auto">
           <div className="relative">
             <button
               onClick={() => gameBridge.emit('ability_trigger')}
               disabled={cooldownRemaining > 0}
+              aria-label="Use ability"
               className={`w-14 h-14 rounded-full border-2 border-purple-500 flex flex-col items-center justify-center bg-black/60 shadow-lg shadow-black/60 hover:border-purple-400 active:scale-95 transition-all select-none duration-100 ${cooldownRemaining > 0 ? 'opacity-40' : ''}`}
             >
               <Flame size={20} className={cooldownRemaining > 0 ? 'text-zinc-500' : 'text-purple-400'} />
@@ -56,10 +59,6 @@ export default function GameControls() {
               </div>
             )}
           </div>
-        </div>
-
-        {/* Right Joystick: Aim */}
-        <div className="pointer-events-auto">
           <Joystick type="right" label="Aim/Shoot" />
         </div>
       </div>

@@ -19,6 +19,8 @@ import { audioManager } from '../lib/audio';
 import gameBridge from '../game/systems/GameBridge';
 import { GD_ITEMS } from '../lib/nft';
 import { getPlayerTextureKey } from '../lib/combatFormulas';
+import { ZONES, ZONE_COUNT } from '../lib/zones';
+import { DIFFICULTIES, DIFFICULTY_ORDER, DifficultyId, getDifficultyId, setDifficulty } from '../lib/difficulty';
 
 type Section = 'nav' | 'tavern' | 'bank' | 'marketplace' | 'multiplayer' | 'leaderboard' | 'stats' | 'profile' | 'codex' | 'loadout' | 'settings';
 
@@ -48,30 +50,6 @@ const NAV_ITEMS: { id: Section; label: string; icon: React.ReactNode }[] = [
   { id: 'settings',    label: 'Settings',      icon: <SettingsIcon size={14} /> },
 ];
 
-// Drop preview images at /public/zones/{sceneKey}.png to populate these cards.
-const ZONE_INFO = [
-  {
-    sceneKey: 'SunfallDunesScene', name: 'Sunfall Dunes', color: 'text-yellow-400',
-    enemyName: 'Imp', enemyDesc: 'Weaker desert variant — fast but frail.',
-    bossName: 'Sand Wraith', bossDesc: 'Swirling desert spirit guarding the dunes with sweeping sandstorms.',
-  },
-  {
-    sceneKey: 'EmberFieldsScene', name: 'Ember Fields', color: 'text-red-500',
-    enemyName: 'Imp', enemyDesc: 'Standard aggressive fire-spitter. Moves fast but frail.',
-    bossName: 'Lava Pumpkin', bossDesc: 'Giant volcanic entity. Shoots heavy rings of magma.',
-  },
-  {
-    sceneKey: 'AshwaterMarshScene', name: 'Ashwater Marsh', color: 'text-purple-400',
-    enemyName: 'Poison Slime', enemyDesc: 'Slow purple gelatin. Spits acidic slowing fluid.',
-    bossName: 'Swamp Hydra', bossDesc: 'Three heads spitting multiple poison projectiles in wide arcs.',
-  },
-  {
-    sceneKey: 'ObsidianPeakScene', name: 'Obsidian Peak', color: 'text-zinc-300',
-    enemyName: 'Obsidian Golem', enemyDesc: 'Slow rocky giant. Blocks 20% of incoming player attacks.',
-    bossName: 'Fire Demon', bossDesc: 'Final volcanic boss. Shoots high-damage flame pulses and shakes the summit.',
-  },
-];
-
 export default function MenuPage({
   playerData,
   setPlayerData,
@@ -88,6 +66,9 @@ export default function MenuPage({
   const [addressCopied, setAddressCopied] = useState(false);
   const [musicOn, setMusicOn]         = useState(true);
   const [sfxOn, setSfxOn]             = useState(true);
+  const [difficulty, setDifficultyState] = useState<DifficultyId>('normal');
+  // Read the saved choice after mount (localStorage isn't available during server render).
+  useEffect(() => { setDifficultyState(getDifficultyId()); }, []);
   const [message, setMessage]         = useState<string | null>(null);
   const [selectedNft, setSelectedNft] = useState<any | null>(null);
   const [showStarterWeapon, setShowStarterWeapon] = useState(false);
@@ -177,7 +158,7 @@ export default function MenuPage({
     setPlayerData((prev: any) => {
       const updated = { ...prev, equippedWeapon: weaponId };
       dbService.savePlayer(updated);
-      gameBridge.emit('weapon_changed', { textureKey: getPlayerTextureKey(prev.skin, weaponId) });
+      gameBridge.emit('weapon_changed', { textureKey: getPlayerTextureKey(prev.skin, weaponId), weaponId });
       return updated;
     });
   };
@@ -516,6 +497,29 @@ export default function MenuPage({
                       {sfxOn ? '🔊 SFX On' : '🔇 SFX Off'}
                     </button>
                   </div>
+
+                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mt-2">Difficulty</span>
+                  <div className="flex gap-2" role="radiogroup" aria-label="Difficulty">
+                    {DIFFICULTY_ORDER.map((id) => {
+                      const active = difficulty === id;
+                      return (
+                        <button
+                          key={id}
+                          role="radio"
+                          aria-checked={active}
+                          onClick={() => {
+                            setDifficulty(id);
+                            setDifficultyState(id);
+                            audioManager.playSfx('click');
+                          }}
+                          className={`flex-1 px-3 py-3 rounded-lg text-xs font-bold border ${active ? 'text-yellow-400 border-yellow-800 bg-yellow-950/20' : 'text-zinc-600 border-zinc-800'}`}
+                        >
+                          {DIFFICULTIES[id].label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[11px] text-zinc-500">{DIFFICULTIES[difficulty].blurb}.</p>
                 </div>
               )}
 
@@ -533,7 +537,7 @@ export default function MenuPage({
                     </div>
                   ) : (
                     <div className="text-xs text-zinc-500 text-center italic">
-                      {playerData.maxUnlockedZone >= 3 ? 'Max stats reached' : 'Clear next zone to unlock 5 more points'}
+                      {(playerData.maxUnlockedZone || 1) >= ZONE_COUNT ? 'Max stats reached' : 'Clear next zone to unlock 5 more points'}
                     </div>
                   )}
 
@@ -704,7 +708,7 @@ export default function MenuPage({
                 <div className="flex flex-col gap-4 w-full">
                   <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Zone Map & Bestiary</span>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {ZONE_INFO.map((zone, i) => {
+                    {ZONES.map((zone, i) => {
                       const zNum = i + 1;
                       const unlocked = (playerData.maxUnlockedZone || 1) >= zNum;
                       return (
@@ -826,7 +830,7 @@ export default function MenuPage({
                     <div className="grid grid-cols-3 gap-2">
                       {[
                         { label: 'Level', value: playerData.level, color: 'text-purple-300', bg: 'bg-purple-950/30 border-purple-800/30' },
-                        { label: 'Zones Cleared', value: `${levelsCleared}/4`, color: 'text-blue-300', bg: 'bg-blue-950/30 border-blue-800/30' },
+                        { label: 'Zones Cleared', value: `${levelsCleared}/${ZONE_COUNT}`, color: 'text-blue-300', bg: 'bg-blue-950/30 border-blue-800/30' },
                         { label: 'NFTs Owned', value: nftCount, color: 'text-pink-300', bg: 'bg-pink-950/30 border-pink-800/30' },
                       ].map(stat => (
                         <div key={stat.label} className={`${stat.bg} border rounded-xl p-2.5 flex flex-col items-center gap-1`}>

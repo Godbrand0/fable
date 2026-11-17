@@ -1,5 +1,8 @@
 import Phaser from 'phaser';
 import CombatScene, { EnemyConfig } from './CombatScene';
+import { getZone } from '../../lib/zones';
+
+const ZONE = getZone('ObsidianPeakScene')!;
 import gameBridge from '../systems/GameBridge';
 
 const WORLD_W = 1440;
@@ -7,9 +10,9 @@ const WORLD_H = 1440;
 const TILE = 32;
 
 export default class ObsidianPeakScene extends CombatScene {
-  protected zoneName = 'Obsidian Peak';
-  protected minLevel = 6;
-  protected maxLevel = 8;
+  protected zoneName = ZONE.name;
+  protected minLevel = ZONE.minLevel;
+  protected maxLevel = ZONE.maxLevel;
   protected tileKey = 'tile_obsidian';
 
   protected regularEnemyConfig: EnemyConfig = {
@@ -185,10 +188,12 @@ export default class ObsidianPeakScene extends CombatScene {
           this.player.x, this.player.y, meteor.x, meteor.y
         );
         if (dist < 55) {
-          this.playerHP = Math.max(0, this.playerHP - 25);
+          const hit = this.scaleDamageTaken(25);
+          this.playerHP = Math.max(0, this.playerHP - hit);
           this.cameras.main.shake(160, 0.015);
           this.cameras.main.flash(100, 150, 0, 0);
-          this.showFloatingText(this.player.x, this.player.y - 12, '-25 METEOR', '#EF2929');
+          this.showFloatingText(this.player.x, this.player.y - 12, `-${hit} METEOR`, '#EF2929');
+          this.onPlayerHurt();
           gameBridge.emit('player_health_changed', { hp: this.playerHP });
           if (this.playerHP <= 0) this.playerDied();
         }
@@ -200,7 +205,7 @@ export default class ObsidianPeakScene extends CombatScene {
 
   private hitByMeteor(player: any, meteor: any) {
     meteor.destroy();
-    this.playerHP = Math.max(0, this.playerHP - 20);
+    this.playerHP = Math.max(0, this.playerHP - this.scaleDamageTaken(20));
     this.cameras.main.shake(100, 0.01);
     this.cameras.main.flash(100, 150, 0, 0);
     gameBridge.emit('player_health_changed', { hp: this.playerHP });

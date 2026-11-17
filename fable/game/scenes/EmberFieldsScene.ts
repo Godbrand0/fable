@@ -1,14 +1,17 @@
 import Phaser from 'phaser';
 import CombatScene, { EnemyConfig } from './CombatScene';
+import { getZone } from '../../lib/zones';
+
+const ZONE = getZone('EmberFieldsScene')!;
 
 const WORLD_W = 1440;
 const WORLD_H = 1440;
 const TILE = 32;
 
 export default class EmberFieldsScene extends CombatScene {
-  protected zoneName = 'Ember Fields';
-  protected minLevel = 1;
-  protected maxLevel = 2;
+  protected zoneName = ZONE.name;
+  protected minLevel = ZONE.minLevel;
+  protected maxLevel = ZONE.maxLevel;
   protected tileKey = 'tile_scorched'; // dry dark earth as base
 
   protected regularEnemyConfig: EnemyConfig = {
