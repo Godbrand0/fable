@@ -14,6 +14,7 @@ import gameBridge from '../game/systems/GameBridge';
 import { DEFAULT_SKIN } from '../lib/skins';
 import { Wallet2, User, Loader2, AlertTriangle } from 'lucide-react';
 import { furthestUnlockedZoneKey } from '../lib/zones';
+import { captureReferral } from '../lib/engagementRewards';
 
 const GameContainer = dynamic(() => import('../components/GameContainer'), {
   ssr: false,
@@ -51,6 +52,9 @@ export default function Home() {
 
   // In-game pause menu (overlays GameContainer + HUD without unmounting them)
   const [showPauseMenu, setShowPauseMenu] = useState(false);
+
+  // Invite links (?ref=0x…): remember who invited this player for the GoodDollar welcome bonus
+  useEffect(() => { captureReferral(); }, []);
 
   // Splash: progress bar → auth screen. Long enough to read the slides
   // (about 4.5 s each) at least once.

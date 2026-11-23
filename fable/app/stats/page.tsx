@@ -66,6 +66,17 @@ export default function StatsPage() {
         </section>
       )}
 
+      {s.engagement && (
+        <section className="mt-8">
+          <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-zinc-400">GoodDollar welcome bonuses</h2>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <Card title="Verified players onboarded" value={fmt(s.engagement.claims)} sub="Welcome bonuses claimed through GoodDollar Engagement Rewards. Each one is a unique verified human." />
+            <Card title="G$ paid to players" value={`${fmt(s.engagement.playersGd)} G$`} sub="Paid by GoodDollar's contract" />
+            <Card title="G$ paid to inviters" value={`${fmt(s.engagement.invitersGd)} G$`} sub="Players who brought a verified friend" />
+          </div>
+        </section>
+      )}
+
       <section className="mt-8">
         <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-zinc-400">Proof — verify on Celo</h2>
         <ul className="mb-4 space-y-1 text-xs">

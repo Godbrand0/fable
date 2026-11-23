@@ -4,6 +4,7 @@ import { ZONE_LEVEL_REWARDS } from '../lib/nft';
 import { zoneName } from '../lib/zones';
 import { celoService } from '../lib/celo';
 import { dbService } from '../lib/supabaseClient';
+import WelcomeBonusCard from './WelcomeBonusCard';
 
 interface BankModalProps {
   playerData: any;
@@ -267,6 +268,15 @@ export default function BankModal({
                 </div>
               )}
             </div>
+
+            {walletConnected && walletAddress && (
+              <WelcomeBonusCard
+                walletAddress={walletAddress}
+                isVerified={isVerified}
+                onClaimed={refreshBalance}
+                showMessage={showMessage}
+              />
+            )}
 
             {/* Content */}
             {pendingZones.length === 0 ? (
