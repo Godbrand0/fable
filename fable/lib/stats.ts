@@ -10,6 +10,7 @@ import { formatUnits } from 'viem';
 import { publicClient, G$_ADDRESS, G$_ABI, IDENTITY_ADDRESS, IDENTITY_ABI } from './celo';
 import { FABLE_ITEMS_ADDRESS } from './nft';
 import { FABLE_MARKETPLACE_ADDRESS } from './marketplace';
+import { ENGAGEMENT_APP_ADDRESS, ENGAGEMENT_REWARDS_ADDRESS, engagementEnabled, getAppStats } from './engagementRewards';
 
 const EXPLORER = 'https://celoscan.io';
 const BLOCKSCOUT = 'https://celo.blockscout.com';
@@ -69,6 +70,8 @@ export interface Stats {
     marketplaceListings: number;
     marketplaceSales: number;
   };
+  // GoodDollar Engagement Rewards (welcome bonus + invites), read from GoodDollar's contract
+  engagement: null | { claims: number; playersGd: number; invitersGd: number; appGd: number };
   prices: { gdUsd: number | null; celoUsd: number | null };
   contracts: { name: string; address: string; url: string }[];
   proof: ProofEntry[];
@@ -112,18 +115,19 @@ export async function getStats(): Promise<Stats> {
   const marketLive = !!FABLE_MARKETPLACE_ADDRESS;
   const out: Stats = {
     generatedAt: new Date().toISOString(),
-    users: null, verifiedUsers: null, transactions: null, revenue: null, economy: null,
+    users: null, verifiedUsers: null, transactions: null, revenue: null, economy: null, engagement: null,
     prices: { gdUsd: null, celoUsd: null },
     contracts: [
       { name: 'FableItems (items, level rewards)', address: FABLE_ITEMS_ADDRESS, url: `${EXPLORER}/address/${FABLE_ITEMS_ADDRESS}` },
       ...(marketLive ? [{ name: 'FableMarketplace', address: FABLE_MARKETPLACE_ADDRESS, url: `${EXPLORER}/address/${FABLE_MARKETPLACE_ADDRESS}` }] : []),
+      ...(engagementEnabled() ? [{ name: `GoodDollar EngagementRewards (Fable app ${ENGAGEMENT_APP_ADDRESS})`, address: ENGAGEMENT_REWARDS_ADDRESS, url: `${EXPLORER}/address/${ENGAGEMENT_REWARDS_ADDRESS}` }] : []),
     ],
     proof: [],
     errors,
   };
 
   // Each source runs independently so one outage doesn't blank the whole page.
-  const [playersR, pricesR, itemsLogsR, rewardLogsR, soldLogsR, listedLogsR, itemsTxR, marketTxR, poolR] = await Promise.allSettled([
+  const [playersR, pricesR, itemsLogsR, rewardLogsR, soldLogsR, listedLogsR, itemsTxR, marketTxR, poolR, engagementR] = await Promise.allSettled([
     (async () => {
       const url = process.env.NEXT_PUBLIC_SUPABASE_URL, key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
       if (!url || !key) throw new Error('Supabase not configured');
@@ -141,6 +145,7 @@ export async function getStats(): Promise<Stats> {
     txCount(FABLE_ITEMS_ADDRESS),
     marketLive ? txCount(FABLE_MARKETPLACE_ADDRESS) : Promise.resolve(0),
     publicClient.readContract({ address: G$_ADDRESS, abi: G$_ABI, functionName: 'balanceOf', args: [FABLE_ITEMS_ADDRESS] }),
+    getAppStats(),
   ]);
 
   const note = (label: string, r: PromiseSettledResult<unknown>) => {
@@ -150,6 +155,8 @@ export async function getStats(): Promise<Stats> {
   note('level reward events', rewardLogsR); note('marketplace sale events', soldLogsR);
   note('marketplace listing events', listedLogsR); note('FableItems tx count', itemsTxR);
   note('marketplace tx count', marketTxR); note('reward pool balance', poolR);
+  note('engagement rewards', engagementR);
+  if (engagementR.status === 'fulfilled') out.engagement = engagementR.value;
 
   if (pricesR.status === 'fulfilled') {
     out.prices = { gdUsd: pricesR.value?.gooddollar?.usd ?? null, celoUsd: pricesR.value?.celo?.usd ?? null };
